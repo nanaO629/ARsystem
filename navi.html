@@ -4,13 +4,13 @@
     <meta charset="utf-8" />
     <title>ARルートナビ</title>
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.min.js"></script>
   </head>
   <body style="margin: 0; overflow: hidden;">
-    <a-scene embedded>
+    <a-scene embedded arjs="sourceType: webcam;">
       <a-camera position="0 1.6 0"></a-camera>
 
       <script>
-        // ルートデータ定義
         const routes = {
           s1: [
             { position: "0 0 -2", rotation: "0 0 0" },
@@ -24,14 +24,17 @@
           ]
         };
 
-        // URLパラメータからルートIDを取得
         const urlParams = new URLSearchParams(window.location.search);
         const routeId = urlParams.get("route");
         const route = routes[routeId];
 
-        // 矢印を追加
         window.onload = () => {
           const scene = document.querySelector("a-scene");
+          if (!route) {
+            alert("ルートが指定されていません！");
+            return;
+          }
+
           route.forEach((step) => {
             const arrow = document.createElement("a-entity");
             arrow.setAttribute("gltf-model", "arrow.glb");
