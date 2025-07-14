@@ -1,23 +1,18 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8">
-    <title>GPS AR Demo</title>
-    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-    <script src="https://rawcdn.githack.com/AR-js-org/AR.js/3.4.2/aframe/build/aframe-ar-nft.js"></script>
-    <script src="https://unpkg.com/aframe-gps-camera@1.7.1/dist/aframe-gps-camera.min.js"></script>
-  </head>
-  <body style="margin: 0; overflow: hidden;">
-    <a-scene embedded arjs="sourceType: webcam;">
-      <a-camera gps-camera rotation-reader></a-camera>
+<head>
+  <meta charset="utf-8" />
+  <title>ARナビ開始</title>
+</head>
+<body>
+  <h2>スタート地点を選んでください</h2>
+  <button onclick="startNavi('s1')">S棟1階入口</button>
+  <button onclick="startNavi('s2')">S棟2階講義室前</button>
 
-      <!-- 目的地をここに設定 -->
-      <a-entity
-        gltf-model="arrow.glb"
-        gps-entity-place="latitude: 37.4221; longitude: -122.0841;"
-        rotation="0 0 0"
-        scale="2 2 2"
-      ></a-entity>
-    </a-scene>
-  </body>
+  <script>
+    function startNavi(routeId) {
+      location.href = `navi.html?route=${routeId}`;
+    }
+  </script>
+</body>
 </html>
