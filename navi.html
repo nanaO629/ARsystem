@@ -45,19 +45,71 @@
         cone.setAttribute("position", "0 0.7 0");
         cylinder.setAttribute("position", "0 0 0");
       } else if (direction === 'down') {
-        cone.setAttribute("rotation", "0 180 0");
-        cylinder.setAttribute("rotation", "0 180 0");
+        cone.setAttribute("rotation", "0 0 180");
+        cylinder.setAttribute("rotation", "0 0 180");
         cone.setAttribute("position", "0 -0.7 0");
         cylinder.setAttribute("position", "0 0 0");
       }
     }
 
-    // 講義室3向けの設定
-    setArrowDirection(1, 'right');
-    setArrowDirection(2, 'down');
-    setArrowDirection(3, 'down');
-    for (let i = 4; i <= 7; i++) {
-      setArrowDirection(i, 'left');
+    const destination = new URLSearchParams(window.location.search).get('destination');
+
+    if (destination === 'class3') {
+      setArrowDirection(1, 'right');
+      setArrowDirection(2, 'up');
+      setArrowDirection(3, 'up');
+      for (let i = 4; i <= 9; i++) setArrowDirection(i, 'left');
+
+    } else if (destination === 'class4') {
+      setArrowDirection(1, 'right');
+      setArrowDirection(2, 'right');
+      setArrowDirection(3, 'down');
+      setArrowDirection(4, 'up');
+      for (let i = 5; i <= 9; i++) setArrowDirection(i, 'left');
+
+    } else if (destination === 'class5') {
+      setArrowDirection(1, 'right');
+      setArrowDirection(2, 'right');
+      setArrowDirection(3, 'down');
+      setArrowDirection(4, 'right');
+      setArrowDirection(5, 'up');
+      for (let i = 6; i <= 9; i++) setArrowDirection(i, 'left');
+
+    } else if (destination === 'class6') {
+      setArrowDirection(1, 'right');
+      setArrowDirection(2, 'right');
+      setArrowDirection(3, 'down');
+      setArrowDirection(4, 'right');
+      setArrowDirection(5, 'right');
+      setArrowDirection(6, 'up');
+      for (let i = 7; i <= 9; i++) setArrowDirection(i, 'left');
+
+    } else if (destination === 'class7') {
+      setArrowDirection(1, 'right');
+      setArrowDirection(2, 'right');
+      setArrowDirection(3, 'down');
+      setArrowDirection(4, 'right');
+      setArrowDirection(5, 'right');
+      setArrowDirection(6, 'right');
+      setArrowDirection(7, 'up');
+
+    } else if (destination === 'class8') {
+      setArrowDirection(1, 'right');
+      setArrowDirection(2, 'right');
+      setArrowDirection(3, 'down');
+      setArrowDirection(4, 'right');
+      setArrowDirection(5, 'right');
+      setArrowDirection(6, 'up');
+      setArrowDirection(7, 'up');
+      setArrowDirection(8, 'left');
+      setArrowDirection(9, 'left');
+
+    } else if (destination === 'pcroom') {
+      setArrowDirection(1, 'right');
+      setArrowDirection(2, 'right');
+      setArrowDirection(3, 'down');
+      for (let i = 4; i <= 8; i++) setArrowDirection(i, 'right');
+      setArrowDirection(9, 'left');
     }
   </script>
 </body>
