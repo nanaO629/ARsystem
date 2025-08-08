@@ -1,18 +1,19 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <title>ARナビ開始</title>
+  <meta charset="UTF-8">
+  <title>目的地を選んでください</title>
 </head>
 <body>
-  <h2>目的地を選んでください</h2>
-  <button onclick="startNavi('s1')">講義室1</button>
-  <button onclick="startNavi('s3')">講義室3</button>
-
-  <script>
-    function startNavi(routeId) {
-      location.href = `navi.html?route=${routeId}`;
-    }
-  </script>
+  <h1>行き先を選んでください</h1>
+  <ul>
+    <li><a href="navi.html?destination=class3">講義室3</a></li>
+    <li><a href="navi.html?destination=class4">講義室4</a></li>
+    <li><a href="navi.html?destination=class5">講義室5</a></li>
+    <li><a href="navi.html?destination=class6">講義室6</a></li>
+    <li><a href="navi.html?destination=class7">講義室7</a></li>
+    <li><a href="navi.html?destination=class8">講義室8</a></li>
+    <li><a href="navi.html?destination=pcroom">計算機実習室</a></li>
+  </ul>
 </body>
 </html>

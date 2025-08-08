@@ -1,56 +1,64 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>ARルートナビ</title>
-    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.min.js"></script>
-  </head>
-  <body style="margin: 0; overflow: hidden;">
-    <a-scene embedded arjs="sourceType: webcam;">
-      <a-camera position="0 1.6 0"></a-camera>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AR Navi</title>
+</head>
+<body style="margin:0px; overflow:hidden;">
+  <script src="aframe.min.js"></script>
+  <script src="aframe-ar.js"></script>
 
-      <script>
-        const routes = {
-          s1: [
-            { position: "0 0 -2", rotation: "0 0 0" },
-            { position: "2 0 -4", rotation: "0 45 0" },
-            { position: "4 0 -6", rotation: "0 90 0" }
-          ],
-          s2: [
-            { position: "0 0 -2", rotation: "0 0 0" },
-            { position: "-2 0 -4", rotation: "0 -45 0" },
-            { position: "-4 0 -6", rotation: "0 -90 0" }
-          ],
-          s3: [ // 講義室3へのルート（仮配置）
-            { position: "0 0 -2", rotation: "0 0 0" },
-            { position: "2 0 -4", rotation: "0 45 0" },
-            { position: "4 0 -6", rotation: "0 90 0" },
-            { position: "6 0 -6", rotation: "0 0 0" }
-          ]
-        };
+  <a-scene embedded arjs="detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false;">
+    <script>
+      for (let i = 0; i <= 28; i++) {
+        document.write(`
+          <a-marker type="barcode" value="${i}" id="marker-${i}">
+            <a-cone id="arrow${i}-cone" position="0 1 0" radius-bottom="0.4" radius-top="0" height="1.2" color="green"></a-cone>
+            <a-cylinder id="arrow${i}-cylinder" position="0 0.7 0" radius="0.12" height="1.6" color="green"></a-cylinder>
+          </a-marker>
+        `);
+      }
+    </script>
+    <a-entity camera></a-entity>
+  </a-scene>
 
-        const urlParams = new URLSearchParams(window.location.search);
-        const routeId = urlParams.get("route");
-        const route = routes[routeId];
+  <script>
+    function setArrowDirection(markerId, direction) {
+      const cone = document.querySelector(`#arrow${markerId}-cone`);
+      const cylinder = document.querySelector(`#arrow${markerId}-cylinder`);
+      if (!cone || !cylinder) return;
 
-        window.onload = () => {
-          const scene = document.querySelector("a-scene");
-          if (!route) {
-            alert("ルートが指定されていません！");
-            return;
-          }
+      if (direction === 'right') {
+        cone.setAttribute("rotation", "0 0 -90");
+        cylinder.setAttribute("rotation", "0 0 90");
+        cone.setAttribute("position", "0.7 0 0");
+        cylinder.setAttribute("position", "0 0 0");
+      } else if (direction === 'left') {
+        cone.setAttribute("rotation", "0 0 90");
+        cylinder.setAttribute("rotation", "0 0 -90");
+        cone.setAttribute("position", "-0.7 0 0");
+        cylinder.setAttribute("position", "0 0 0");
+      } else if (direction === 'up') {
+        cone.setAttribute("rotation", "0 0 0");
+        cylinder.setAttribute("rotation", "0 0 0");
+        cone.setAttribute("position", "0 0.7 0");
+        cylinder.setAttribute("position", "0 0 0");
+      } else if (direction === 'down') {
+        cone.setAttribute("rotation", "0 180 0");
+        cylinder.setAttribute("rotation", "0 180 0");
+        cone.setAttribute("position", "0 -0.7 0");
+        cylinder.setAttribute("position", "0 0 0");
+      }
+    }
 
-          route.forEach((step) => {
-            const arrow = document.createElement("a-entity");
-            arrow.setAttribute("gltf-model", "arrow.glb");
-            arrow.setAttribute("position", step.position);
-            arrow.setAttribute("rotation", step.rotation);
-            arrow.setAttribute("scale", "0.5 0.5 0.5");
-            scene.appendChild(arrow);
-          });
-        };
-      </script>
-    </a-scene>
-  </body>
+    // 講義室3向けの設定
+    setArrowDirection(1, 'right');
+    setArrowDirection(2, 'down');
+    setArrowDirection(3, 'down');
+    for (let i = 4; i <= 7; i++) {
+      setArrowDirection(i, 'left');
+    }
+  </script>
+</body>
 </html>
