@@ -10,49 +10,50 @@
   <script src="aframe-ar.js"></script>
 
   <a-scene embedded arjs="detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false;">
+    <!-- 3D矢印モデルをプリロード -->
+    <a-assets>
+      <!-- arrow.glb はこのHTMLと同じフォルダに置いてください。別パスなら src を変更 -->
+      <a-asset-item id="arrowModel" src="arrow.glb"></a-asset-item>
+    </a-assets>
+
     <script>
+      // マーカー0〜28を生成。
       for (let i = 0; i <= 28; i++) {
         document.write(`
           <a-marker type="barcode" value="${i}" id="marker-${i}">
-            <a-cone id="arrow${i}-cone" position="0 1 0" radius-bottom="0.4" radius-top="0" height="1.2" color="green"></a-cone>
-            <a-cylinder id="arrow${i}-cylinder" position="0 0.7 0" radius="0.12" height="1.6" color="green"></a-cylinder>
+            <a-entity id="arrow${i}"
+                      gltf-model="#arrowModel"
+                      position="0 0 0"
+                      rotation="0 0 0"
+                      scale="0.8 0.8 0.8"></a-entity>
           </a-marker>
         `);
       }
     </script>
+
     <a-entity camera></a-entity>
   </a-scene>
 
   <script>
-    function setArrowDirection(markerId, direction) {
-      const cone = document.querySelector(`#arrow${markerId}-cone`);
-      const cylinder = document.querySelector(`#arrow${markerId}-cylinder`);
-      if (!cone || !cylinder) return;
+    // モデルの基準向きが合わない場合はここを±90ずつ調整
+    const BASE_X = 0, BASE_Y = 0, BASE_Z = 0;
 
-      if (direction === 'right') {
-        cone.setAttribute("rotation", "0 0 -90");
-        cylinder.setAttribute("rotation", "0 0 90");
-        cone.setAttribute("position", "0.7 0 0");
-        cylinder.setAttribute("position", "0 0 0");
-      } else if (direction === 'left') {
-        cone.setAttribute("rotation", "0 0 90");
-        cylinder.setAttribute("rotation", "0 0 -90");
-        cone.setAttribute("position", "-0.7 0 0");
-        cylinder.setAttribute("position", "0 0 0");
-      } else if (direction === 'up') {
-        cone.setAttribute("rotation", "0 0 0");
-        cylinder.setAttribute("rotation", "0 0 0");
-        cone.setAttribute("position", "0 0.7 0");
-        cylinder.setAttribute("position", "0 0 0");
-      } else if (direction === 'down') {
-        cone.setAttribute("rotation", "0 0 180");
-        cylinder.setAttribute("rotation", "0 0 180");
-        cone.setAttribute("position", "0 -0.7 0");
-        cylinder.setAttribute("position", "0 0 0");
-      }
+    function setArrowDirection(markerId, direction) {
+      const arrow = document.querySelector(`#arrow${markerId}`);
+      if (!arrow) return;
+
+      // 既存ロジックに合わせ、Z軸回転で左右・前後を表現
+      let z = 0;
+      if (direction === 'right') z = -90;
+      else if (direction === 'left') z = 90;
+      else if (direction === 'up') z = 0;
+      else if (direction === 'down') z = 180;
+
+      arrow.setAttribute('rotation', `${BASE_X} ${BASE_Y} ${BASE_Z + z}`);
     }
 
-    const destination = new URLSearchParams(window.location.search).get('destination');
+    const urlParams = new URLSearchParams(window.location.search);
+    const destination = urlParams.get('destination');
 
     if (destination === 'class3') {
       setArrowDirection(1, 'right');
@@ -92,6 +93,8 @@
       setArrowDirection(5, 'right');
       setArrowDirection(6, 'right');
       setArrowDirection(7, 'up');
+      setArrowDirection(8, 'left');
+      setArrowDirection(9, 'left');
 
     } else if (destination === 'class8') {
       setArrowDirection(1, 'right');
@@ -104,12 +107,12 @@
       setArrowDirection(8, 'left');
       setArrowDirection(9, 'left');
 
-    } else if (destination === 'pcroom') {
+    } else if (destination === 'pcroom') { // 計算機実習室（indexのリンクと合わせて pcroom）
       setArrowDirection(1, 'right');
       setArrowDirection(2, 'right');
-      setArrowDirection(3, 'down');
+      setArrowDirection(3, 'right'); // ユーザー指示により3は右
       for (let i = 4; i <= 8; i++) setArrowDirection(i, 'right');
-      setArrowDirection(9, 'left');
+      setArrowDirection(9, 'up');     // 9は直進
     }
   </script>
 </body>
