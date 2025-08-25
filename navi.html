@@ -10,12 +10,11 @@
   <script src="aframe-ar.js"></script>
 
   <script>
-    // テキストを常にカメラの向きに合わせる（ビルボード）
+    // カメラを向く簡易ビルボード（階段テキスト用）
     AFRAME.registerComponent('billboard', {
       tick: function () {
         const cam = this.el.sceneEl && this.el.sceneEl.camera;
-        if (!cam) return;
-        this.el.object3D.quaternion.copy(cam.quaternion);
+        if (cam) this.el.object3D.quaternion.copy(cam.quaternion);
       }
     });
   </script>
@@ -26,22 +25,62 @@
   </a-scene>
 
   <script>
+    // 向き→ヨー角（X=-90で寝かせ、Yだけを回す）
     const yawMap = {'直進':0,'下':0,'うしろ':180,'右':-90,'左':90,'右斜め':-45,'左斜め':45};
     const normalize = d => d==='ひだり'?'左':d;
 
     const plan = {
-      '3': {1:'右',2:'うしろ',3:'うしろ',4:'左',5:'左',6:'左',7:'左',8:'左斜め',9:'左',10:'左',11:'左'},
-      '4': {1:'右',2:'右',3:'下',4:'直進',5:'左',6:'左',7:'左',8:'左斜め',9:'左',10:'左',11:'左'},
-      '5': {1:'右',2:'右',3:'下',4:'右',5:'直進',6:'左',7:'左',8:'左斜め',9:'左',10:'左',11:'左'},
-      '6': {1:'右',2:'右',3:'下',4:'右',5:'右',6:'直進',7:'ひだり',8:'左斜め',9:'左',10:'左',11:'左'},
-      '7': {1:'右',2:'右',3:'下',4:'右',5:'右',6:'右',7:'直進',8:'左斜め',9:'左',10:'左',11:'左'},
-      '8': {1:'右',2:'右',3:'下',4:'右',5:'右',6:'直進',7:'うしろ',8:'左斜め',9:'左',10:'左',11:'左'},
-      '9': {1:'右',2:'右',3:'下',4:'右',5:'右',6:'階段',7:'右',8:'下',9:'階段',10:'左',11:'左'}
+      '3':  {1:'右', 2:'うしろ',3:'うしろ', 4:'左',5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '4':  {1:'右', 2:'右', 3:'下', 4:'直進', 5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '5':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'直進', 6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '6':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'ひだり', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '7':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'右',   7:'直進',   8:'左斜め', 9:'左',10:'左',11:'左'},
+      '8':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'うしろ', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '9':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'階段', 7:'右',     8:'下',     9:'階段', 10:'左',11:'左'},
+
+      // 追加：講義室10
+      '10': {
+        1:'右',
+        2:'右', 3:'右', 4:'右',
+        5:'階段', 6:'階段',
+        7:'右', 8:'右',
+        9:'階段',
+        10:'左', 11:'左',
+        12:'左', 13:'左',
+        14:'左',
+        15:'下',
+        16:'右', 17:'右'
+      },
+
+      // 追加：講義室11（1〜11は講義室10と同じ、12〜16左・17下）
+      '11': {
+        1:'右',
+        2:'右', 3:'右', 4:'右',
+        5:'階段', 6:'階段',
+        7:'右', 8:'右',
+        9:'階段',
+        10:'左', 11:'左',
+        12:'左', 13:'左', 14:'左', 15:'左', 16:'左',
+        17:'下'
+      },
+
+      // 追加：学務課（room=gakumu）
+      // 1〜11は講義室10と同じ、12・13は下、14〜17は右
+      'gakumu': {
+        1:'右',
+        2:'右', 3:'右', 4:'右',
+        5:'階段', 6:'階段',
+        7:'右', 8:'右',
+        9:'階段',
+        10:'左', 11:'左',
+        12:'下', 13:'下',
+        14:'右', 15:'右', 16:'右', 17:'右'
+      }
     };
 
     const room = new URLSearchParams(location.search).get('room') || '3';
-
     const scene = document.querySelector('#scene');
+
     scene.addEventListener('loaded', () => {
       for (let i = 1; i <= 28; i++) {
         const marker = document.createElement('a-marker');
@@ -49,14 +88,14 @@
         marker.setAttribute('value', String(i));
         marker.setAttribute('id', `marker-${i}`);
 
-        // ===== 矢印（先輩方式） =====
+        // 矢印（先輩方式）
         const wrap = document.createElement('a-entity');
         wrap.setAttribute('id', `arrowWrap${i}`);
         wrap.setAttribute('visible','true');
 
         const yawNode = document.createElement('a-entity');
         yawNode.setAttribute('id', `arrowYaw${i}`);
-        yawNode.setAttribute('rotation','-90 0 0'); // X=-90で寝かせる（前=-Z 基準）
+        yawNode.setAttribute('rotation','-90 0 0'); // 寝かせ固定
 
         const cone = document.createElement('a-cone');
         cone.setAttribute('position','0 0.6 0');
@@ -75,24 +114,21 @@
         yawNode.appendChild(cyl);
         wrap.appendChild(yawNode);
 
-        // ===== 階段テキスト（textコンポーネントで安定表示） =====
+        // 階段テキスト（ビルボード）
         const txt = document.createElement('a-entity');
         txt.setAttribute('id', `stairsText${i}`);
-        // マーカー面から手前（+Z）＆少し上へ
-        txt.setAttribute('position','0 1.1 0.35');
-        txt.setAttribute('billboard','');         // 常にカメラ向き
+        txt.setAttribute('position','0 1.1 0.35'); // 手前(+Z)へ
+        txt.setAttribute('billboard','');
         txt.setAttribute('visible','false');
-        // text コンポーネント設定（読みやすさ重視）
         txt.setAttribute('text', {
           value: '階段へ',
           align: 'center',
           color: 'red',
-          width: 2.8,            // 文字幅（必要なら 3〜4 へ）
+          width: 3.2,
           baseline: 'center',
           wrapCount: 6
         });
-        // さらに大きくしたければ scale を上げる（例: 2.2）
-        txt.setAttribute('scale', '1.9 1.9 1.9');
+        txt.setAttribute('scale', '2 2 2');
 
         marker.appendChild(wrap);
         marker.appendChild(txt);
@@ -102,7 +138,6 @@
           const dirRaw = (plan[room] || {})[i];
           if (!dirRaw) return;
           const dir = normalize(dirRaw);
-
           if (dir === '階段') {
             wrap.setAttribute('visible','false');
             txt.setAttribute('visible','true');
