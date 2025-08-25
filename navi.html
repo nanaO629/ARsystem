@@ -1,196 +1,100 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>AR Navi</title>
-
-  <!-- CDN例（ローカルに置くなら差し替えOK） -->
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <meta charset="UTF-8">
+  <title>ARナビ</title>
+  <script src="aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.min.js"></script>
-
   <style>
-    html, body { margin:0; overflow:hidden; }
+    .label {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 5px;
+      font-size: 18px;
+      display: none;
+    }
   </style>
 </head>
-<body>
-  <a-scene embedded arjs="detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false;">
-    <a-entity id="markers"></a-entity>
-    <a-entity camera></a-entity>
+<body style="margin: 0; overflow: hidden;">
+  <div class="label" id="stairsLabel">階段へ</div>
+  
+  <a-scene embedded arjs="sourceType: webcam;">
+    <!-- カメラ -->
+    <a-camera position="0 1.6 0"></a-camera>
+
+    <!-- マーカーごとの表示要素 -->
+    <a-assets>
+      <img id="arrow-right" src="arrow_right.png" />
+      <img id="arrow-left" src="arrow_left.png" />
+      <img id="arrow-back" src="arrow_back.png" />
+      <img id="arrow-down" src="arrow_down.png" />
+      <img id="arrow-straight" src="arrow_straight.png" />
+      <img id="arrow-diagonal-left" src="arrow_diagonal_left.png" />
+    </a-assets>
+
+    <!-- 11個のマーカーを配置 -->
+    <a-marker id="marker1" type="barcode" value="1"></a-marker>
+    <a-marker id="marker2" type="barcode" value="2"></a-marker>
+    <a-marker id="marker3" type="barcode" value="3"></a-marker>
+    <a-marker id="marker4" type="barcode" value="4"></a-marker>
+    <a-marker id="marker5" type="barcode" value="5"></a-marker>
+    <a-marker id="marker6" type="barcode" value="6"></a-marker>
+    <a-marker id="marker7" type="barcode" value="7"></a-marker>
+    <a-marker id="marker8" type="barcode" value="8"></a-marker>
+    <a-marker id="marker9" type="barcode" value="9"></a-marker>
+    <a-marker id="marker10" type="barcode" value="10"></a-marker>
+    <a-marker id="marker11" type="barcode" value="11"></a-marker>
   </a-scene>
 
   <script>
-    // ===== 調整パラメータ =====
-    const MARKER_MIN = 0;
-    const MARKER_MAX = 28;     // 0〜28を生成（必要に応じて変更）
-    const arrowLiftY = 0.25;   // 矢印を面から少し浮かせて Z-fighting 回避
-    const shaftHeight = 1.6;
-    const shaftRadius = 0.12;
-    const coneHeight  = 1.0;
-    const coneBase    = 0.4;
-    const arrowColor  = "green";
+    const stairsLabel = document.getElementById("stairsLabel");
+    const destination = sessionStorage.getItem("destination");
 
-    // ===== マーカー生成（矢印本体＋「階段へ」ラベル（初期非表示）） =====
-    const container = document.getElementById('markers');
-    for (let i = MARKER_MIN; i <= MARKER_MAX; i++) {
-      container.insertAdjacentHTML('beforeend', `
-        <a-marker type="barcode" value="${i}" id="marker-${i}">
-          <!-- 矢印（親を回すだけで方向変更） -->
-          <a-entity id="arrow${i}" position="0 ${arrowLiftY} 0" rotation="0 0 0" visible="false">
-            <a-cylinder position="0 ${shaftHeight * 0.3125} 0"
-                        radius="${shaftRadius}" height="${shaftHeight}"
-                        color="${arrowColor}"></a-cylinder>
-            <a-cone position="0 ${shaftHeight * 0.625 + coneHeight * 0.375} 0"
-                     radius-bottom="${coneBase}" radius-top="0"
-                     height="${coneHeight}" color="${arrowColor}"></a-cone>
-          </a-entity>
+    // 講義室ごとのルート情報
+    const routes = {
+      "講義室3": {1:"右",2:"うしろ",3:"うしろ",4:"左",5:"左",6:"左",7:"左",8:"左斜め",9:"左",10:"左",11:"左"},
+      "講義室4": {1:"右",2:"右",3:"下",4:"直進",5:"左",6:"左",7:"左",8:"左斜め",9:"左",10:"左",11:"左"},
+      "講義室5": {1:"右",2:"右",3:"下",4:"右",5:"直進",6:"左",7:"左",8:"左斜め",9:"左",10:"左",11:"左"},
+      "講義室6": {1:"右",2:"右",3:"下",4:"右",5:"右",6:"直進",7:"ひだり",8:"左斜め",9:"左",10:"左",11:"左"},
+      "講義室7": {1:"右",2:"右",3:"下",4:"右",5:"右",6:"右",7:"直進",8:"左斜め",9:"左",10:"左",11:"左"},
+      "講義室8": {1:"右",2:"右",3:"下",4:"右",5:"右",6:"直進",7:"うしろ",8:"左斜め",9:"左",10:"左",11:"左"},
+      "講義室9": {1:"右",2:"右",3:"下",4:"右",5:"右",6:"階段",7:"右",8:"下",9:"階段",10:"左",11:"左"}
+    };
 
-          <!-- 「階段へ」ラベル（背景プレート＋テキスト） -->
-          <a-entity id="label${i}" position="0 ${shaftHeight*0.9 + coneHeight*0.6} 0" visible="false">
-            <a-plane width="1.6" height="0.5" color="#222" opacity="0.7"></a-plane>
-            <a-text value="階段へ" align="center" width="3.2" color="#fff" position="0 0 0.01"></a-text>
-          </a-entity>
-        </a-marker>
-      `);
-    }
+    // 矢印画像をマーカーに表示する関数
+    function setArrow(markerId, direction) {
+      const marker = document.getElementById(markerId);
+      if (!marker) return;
 
-    // ===== 方向設定（日本語同義語も対応） =====
-    function setArrowDirection(markerId, direction) {
-      const arrow = document.querySelector(`#arrow${markerId}`);
-      if (!arrow) return;
-
-      // 同義語正規化
-      const norm = (dir) => {
-        const d = String(dir).trim();
-        if (["up", "直進", "まっすぐ", "straight", "forward"].includes(d)) return "up";
-        if (["down", "下"].includes(d)) return "down";
-        if (["back", "うしろ", "後ろ", "バック"].includes(d)) return "back";
-        if (["left", "ひだり", "左"].includes(d)) return "left";
-        if (["right", "みぎ", "右"].includes(d)) return "right";
-        if (["diag-left", "左斜め", "左ななめ"].includes(d)) return "diag-left";
-        if (["diag-right", "右斜め", "右ななめ"].includes(d)) return "diag-right";
-        if (["stairs", "階段", "階段へ"].includes(d)) return "stairs";
-        return null;
-      };
-
-      const nd = norm(direction);
-      // 回転（Z軸）定義
-      const rotZByDir = {
-        "up": 0,
-        "down": 180,
-        "back": 180,
-        "left": 90,
-        "right": -90,
-        "diag-left": 45,
-        "diag-right": -45,
-        "stairs": 0, // 矢印自体は直進、ラベルで階段を示す
-      };
-
-      if (!nd) { arrow.setAttribute('visible', false); return; }
-
-      arrow.setAttribute('rotation', `0 0 ${rotZByDir[nd]}`);
-      arrow.setAttribute('visible', true);
-
-      // 階段ラベルの表示切替
-      const label = document.querySelector(`#label${markerId}`);
-      if (label) label.setAttribute('visible', nd === "stairs");
-    }
-
-    // ユーティリティ：配列や範囲に一括適用
-    function setForList(list, dir) {
-      list.forEach(id => setArrowDirection(id, dir));
-    }
-    function setForRange(start, end, dir) {
-      for (let i = start; i <= end; i++) setArrowDirection(i, dir);
-    }
-
-    // まず全矢印＆ラベルを非表示（他destinationからの残りを消す保険）
-    function hideAll() {
-      for (let i = MARKER_MIN; i <= MARKER_MAX; i++) {
-        const arrow = document.querySelector(`#arrow${i}`);
-        const label = document.querySelector(`#label${i}`);
-        if (arrow) arrow.setAttribute('visible', false);
-        if (label) label.setAttribute('visible', false);
+      // 階段の場合 → ラベル表示して矢印は非表示
+      if (direction === "階段") {
+        stairsLabel.style.display = "block";
+        marker.innerHTML = "";
+        return;
       }
+
+      stairsLabel.style.display = "none";
+      let imgId = "";
+      switch(direction) {
+        case "右": imgId = "arrow-right"; break;
+        case "左": imgId = "arrow-left"; break;
+        case "うしろ": imgId = "arrow-back"; break;
+        case "下": imgId = "arrow-down"; break;
+        case "直進": imgId = "arrow-straight"; break;
+        case "左斜め": imgId = "arrow-diagonal-left"; break;
+      }
+      marker.innerHTML = `<a-image src="#${imgId}" position="0 0 0" rotation="-90 0 0" scale="1 1 1"></a-image>`;
     }
 
-    // ===== ルート定義（ご指定の指示に忠実に反映） =====
-    const urlParams   = new URLSearchParams(window.location.search);
-    const destination = urlParams.get('destination');
-
-    hideAll();
-
-    if (destination === 'class3') {
-      setArrowDirection(1, 'right');
-      setForList([2,3], 'back');
-      setForRange(4, 7, 'left');
-      setArrowDirection(8, 'diag-left');
-      setForRange(9, 11, 'left');
-
-    } else if (destination === 'class4') {
-      setArrowDirection(1, 'right');
-      setArrowDirection(2, 'right');
-      setArrowDirection(3, 'down');
-      setArrowDirection(4, 'up');     // 直進
-      setForRange(5, 7, 'left');
-      setArrowDirection(8, 'diag-left');
-      setForRange(9, 11, 'left');
-
-    } else if (destination === 'class5') {
-      setArrowDirection(1, 'right');
-      setArrowDirection(2, 'right');
-      setArrowDirection(3, 'down');
-      setArrowDirection(4, 'right');
-      setArrowDirection(5, 'up');     // 直進
-      setForRange(6, 7, 'left');
-      setArrowDirection(8, 'diag-left');
-      setForRange(9, 11, 'left');
-
-    } else if (destination === 'class6') {
-      setArrowDirection(1, 'right');
-      setArrowDirection(2, 'right');
-      setArrowDirection(3, 'down');
-      setArrowDirection(4, 'right');
-      setArrowDirection(5, 'right');
-      setArrowDirection(6, 'up');     // 直進
-      setArrowDirection(7, 'left');
-      setArrowDirection(8, 'diag-left');
-      setForRange(9, 11, 'left');
-
-    } else if (destination === 'class7') {
-      setArrowDirection(1, 'right');
-      setArrowDirection(2, 'right');
-      setArrowDirection(3, 'down');
-      setArrowDirection(4, 'right');
-      setArrowDirection(5, 'right');
-      setArrowDirection(6, 'right');
-      setArrowDirection(7, 'up');     // 直進
-      setArrowDirection(8, 'diag-left');
-      setForRange(9, 11, 'left');
-
-    } else if (destination === 'class8') {
-      setArrowDirection(1, 'right');
-      setArrowDirection(2, 'right');
-      setArrowDirection(3, 'down');
-      setArrowDirection(4, 'right');
-      setArrowDirection(5, 'right');
-      setArrowDirection(6, 'up');     // 直進
-      setArrowDirection(7, 'back');   // うしろ
-      setArrowDirection(8, 'diag-left');
-      setForRange(9, 11, 'left');
-
-    } else if (destination === 'class9') {
-      setArrowDirection(1, 'right');
-      setArrowDirection(2, 'right');
-      setArrowDirection(3, 'down');
-      setArrowDirection(4, 'right');
-      setArrowDirection(5, 'right');
-      setArrowDirection(6, 'stairs'); // 階段へ（ラベル表示）
-      setArrowDirection(7, 'right');
-      setArrowDirection(8, 'down');
-      setArrowDirection(9, 'stairs'); // 階段へ（ラベル表示）
-      setForRange(10, 11, 'left');
-    }
+    // 現在の目的地に応じてルート設定
+    Object.keys(routes[destination]).forEach(value => {
+      setArrow("marker" + value, routes[destination][value]);
+    });
   </script>
 </body>
 </html>
