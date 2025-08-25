@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>AR Navi</title>
 
-  <!-- A-Frame / AR.js -->
+  <!-- A-Frame / AR.js（CDN） -->
   <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.min.js"></script>
 
   <script>
-    // カメラへの“ヨー（Y軸）だけ”を合わせる＝文字が傾かない
+    // 画像を「ヨー（Y軸）だけ」カメラへ向ける（ピッチ/ロールは固定）
+    // さらに 180° 足して“正面”を向かせる
     AFRAME.registerComponent('face-camera-yaw', {
       init() {
         this.vCam = new THREE.Vector3();
@@ -26,8 +27,8 @@
 
         const dx = this.vCam.x - this.vObj.x;
         const dz = this.vCam.z - this.vObj.z;
-        const yawRad = Math.atan2(dx, dz); // ←Y軸回転のみ
-        this.el.object3D.rotation.set(0, yawRad, 0);
+        const yaw = Math.atan2(dx, dz) + Math.PI; // ← 正面補正
+        this.el.object3D.rotation.set(0, yaw, 0);
       }
     });
   </script>
@@ -53,29 +54,34 @@
     const yawMap = {'直進':0,'下':0,'うしろ':180,'右':-90,'左':90,'右斜め':-45,'左斜め':45};
     const normalize = d => d==='ひだり' ? '左' : d;
 
-    // ルート（3〜11・学務課）
+    // ルート定義（講義室3〜11・学務課）
     const plan = {
-      '3':  {1:'右',2:'うしろ',3:'うしろ',4:'左',5:'左',6:'左',7:'左',8:'左斜め',9:'左',10:'左',11:'左'},
-      '4':  {1:'右',2:'右',3:'下',4:'直進',5:'左',6:'左',7:'左',8:'左斜め',9:'左',10:'左',11:'左'},
-      '5':  {1:'右',2:'右',3:'下',4:'右',5:'直進',6:'左',7:'左',8:'左斜め',9:'左',10:'左',11:'左'},
-      '6':  {1:'右',2:'右',3:'下',4:'右',5:'右',6:'直進',7:'ひだり',8:'左斜め',9:'左',10:'左',11:'左'},
-      '7':  {1:'右',2:'右',3:'下',4:'右',5:'右',6:'右',7:'直進',8:'左斜め',9:'左',10:'左',11:'左'},
-      '8':  {1:'右',2:'右',3:'下',4:'右',5:'右',6:'直進',7:'うしろ',8:'左斜め',9:'左',10:'左',11:'左'},
-      '9':  {1:'右',2:'右',3:'下',4:'右',5:'右',6:'階段',7:'右',8:'下',9:'階段',10:'左',11:'左'},
-      '10': {1:'右',2:'右',3:'右',4:'右',5:'階段',6:'階段',7:'右',8:'右',9:'階段',10:'左',11:'左',
-             12:'左',13:'左',14:'左',15:'下',16:'右',17:'右'},
-      '11': {1:'右',2:'右',3:'右',4:'右',5:'階段',6:'階段',7:'右',8:'右',9:'階段',10:'左',11:'左',
-             12:'左',13:'左',14:'左',15:'左',16:'左',17:'下'},
-      'gakumu': {1:'右',2:'右',3:'右',4:'右',5:'階段',6:'階段',7:'右',8:'右',9:'階段',10:'左',11:'左',
-                 12:'下',13:'下',14:'右',15:'右',16:'右',17:'右'}
+      '3':  {1:'右', 2:'うしろ',3:'うしろ', 4:'左',5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '4':  {1:'右', 2:'右', 3:'下', 4:'直進', 5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '5':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'直進', 6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '6':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'ひだり', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '7':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'右',   7:'直進',   8:'左斜め', 9:'左',10:'左',11:'左'},
+      '8':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'うしろ', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '9':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'階段', 7:'右',     8:'下',     9:'階段', 10:'左',11:'左'},
+
+      '10': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
+             12:'左',13:'左', 14:'左', 15:'下', 16:'右',17:'右'},
+      '11': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
+             12:'左',13:'左',14:'左',15:'左',16:'左', 17:'下'},
+
+      // room=gakumu
+      'gakumu': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
+                 12:'下',13:'下', 14:'右',15:'右',16:'右',17:'右'}
     };
 
     const room = new URLSearchParams(location.search).get('room') || '3';
     const scene = document.querySelector('#scene');
 
+    // アセットロード完了フラグ
     let stairsReady = false;
     document.getElementById('assets').addEventListener('loaded', () => { stairsReady = true; });
 
+    // シーン準備完了後にノード生成
     scene.addEventListener('loaded', () => {
       for (let i = 1; i <= 28; i++) {
         const marker = document.createElement('a-marker');
@@ -83,14 +89,14 @@
         marker.setAttribute('value', String(i));
         marker.setAttribute('id', `marker-${i}`);
 
-        // 先輩方式の矢印
+        // 先輩方式の矢印（cone+cylinder）
         const wrap = document.createElement('a-entity');
         wrap.setAttribute('id', `arrowWrap${i}`);
         wrap.setAttribute('visible','true');
 
         const yawNode = document.createElement('a-entity');
         yawNode.setAttribute('id', `arrowYaw${i}`);
-        yawNode.setAttribute('rotation','-90 0 0'); // 寝かせ固定
+        yawNode.setAttribute('rotation','-90 0 0'); // X=-90で寝かせ固定（前=-Z）
 
         const cone = document.createElement('a-cone');
         cone.setAttribute('position','0 0.6 0');
@@ -109,22 +115,23 @@
         yawNode.appendChild(cyl);
         wrap.appendChild(yawNode);
 
-        // 階段グループ（画像＋文字）— Yaw のみ追従
+        // 階段グループ（画像＋文字）
         const stairsGroup = document.createElement('a-entity');
         stairsGroup.setAttribute('id', `stairsGroup${i}`);
         stairsGroup.setAttribute('visible', 'false');
-        stairsGroup.setAttribute('face-camera-yaw', '');       // ← これがポイント
-        stairsGroup.setAttribute('position', '0 1.05 0.28');   // 少し上・手前(+Z)
-        stairsGroup.setAttribute('scale', '1.9 1.9 1.9');
+        stairsGroup.setAttribute('face-camera-yaw', '');       // ← ヨーだけカメラへ
+        stairsGroup.setAttribute('position', '0 1.2 0.35');    // 少し上・手前(+Z)
+        stairsGroup.setAttribute('scale', '-2.2 2.2 2.2');     // 水平反転＋少し大きく
 
         const stairsImg = document.createElement('a-plane');
         stairsImg.setAttribute('id', `stairsImg${i}`);
         stairsImg.setAttribute('width', '0.7');
         stairsImg.setAttribute('height', '0.7');
-        // フラットシェーダ＋両面＋透明PNG
+        // フラット＋透明PNG＋両面
         stairsImg.setAttribute('material', 'shader: flat; src: #stairsImgAsset; transparent: true; side: double; alphaTest: 0.01;');
         stairsImg.setAttribute('visible','false');
 
+        // 画像が使えない場合のフォールバック文字
         const stairsText = document.createElement('a-entity');
         stairsText.setAttribute('id', `stairsText${i}`);
         stairsText.setAttribute('position', '0 0 0.001');
@@ -133,7 +140,7 @@
           value: '階段へ',
           align: 'center',
           color: 'red',
-          width: 2.8,
+          width: 3.0,
           baseline: 'center',
           wrapCount: 6
         });
@@ -145,7 +152,7 @@
         marker.appendChild(stairsGroup);
         scene.appendChild(marker);
 
-        // 方向適用
+        // 方向/表示の適用
         const apply = () => {
           const dirRaw = (plan[room] || {})[i];
           if (!dirRaw) return;
@@ -169,13 +176,10 @@
           }
         };
 
-        apply();
-        marker.addEventListener('markerFound', apply);
+        apply();                           // 初回適用
+        marker.addEventListener('markerFound', apply); // 検出時にも再適用
       }
     });
-
-    // （必要なら）左右反転して見える場合は次の1行を有効化
-    // → stairsGroup.setAttribute('scale','-1 1 1') で水平反転できます
   </script>
 </body>
 </html>
