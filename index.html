@@ -1,74 +1,134 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>目的地選択</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>目的地選択 - ARナビ</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #222;
+      --muted: #666;
+      --accent: #4CAF50;
+      --accent-2: #2f8a34;
+      --radius: 14px;
+      --shadow: 0 10px 25px rgba(0,0,0,0.08);
+    }
 
-        .container {
-            background-color: #fff;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            text-align: center;
-            width: 300px;
-        }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "Noto Sans JP", sans-serif;
+    }
 
-        h2 {
-            margin-bottom: 20px;
-        }
+    .wrap {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
 
-        button {
-            width: 100%;
-            padding: 12px;
-            margin: 8px 0;
-            font-size: 16px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            background-color: #b787f7;
-            color: white;
-            transition: background-color 0.3s;
-        }
+    .card {
+      background: var(--card);
+      width: min(900px, 100%);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: clamp(20px, 4vw, 36px);
+    }
 
-        button:hover {
-            background-color: #9698ff;
-        }
-    </style>
+    .title {
+      margin: 0 0 6px;
+      font-size: clamp(20px, 3.2vw, 28px);
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .subtitle {
+      margin: 0 0 22px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 12px;
+      text-decoration: none;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: 16px;
+      transition: transform .06s ease, background .2s ease, box-shadow .2s ease;
+      box-shadow: 0 6px 14px rgba(76,175,80,0.18);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:hover { background: var(--accent-2); }
+    .btn:active { transform: translateY(1px) scale(0.99); }
+
+    .sect-title {
+      margin: 22px 0 10px;
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 700;
+      letter-spacing: .02em;
+    }
+
+    .note {
+      margin-top: 18px;
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.6;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h2>目的地を選択してください</h2>
-        <button onclick="goToDestination(3)">講義室 3</button>
-        <button onclick="goToDestination(4)">講義室 4</button>
-        <button onclick="goToDestination(5)">講義室 5</button>
-        <button onclick="goToDestination(6)">講義室 6</button>
-        <button onclick="goToDestination(7)">講義室 7</button>
-        <button onclick="goToDestination(8)">講義室 8</button>
-        <button onclick="goToDestination(9)">講義室 9</button>
-        <button onclick="location.href='navi.html?room=10'">講義室 10</button>
-        <button onclick="location.href='navi.html?room=11'">講義室 11</button>
-        <button onclick="location.href='navi.html?room=gakumu'">学務課</button>
+  <div class="wrap">
+    <main class="card" role="main">
+      <h1 class="title">目的地を選択してください</h1>
+      <p class="subtitle">選択後、カメラが起動します。カメラのアクセス許可を求められたら「許可」を選んでください。</p>
 
-    </div>
+      <div class="sect">
+        <div class="sect-title">講義室</div>
+        <div class="grid" aria-label="講義室一覧">
+          <a class="btn" href="navi.html?room=3">講義室 3</a>
+          <a class="btn" href="navi.html?room=4">講義室 4</a>
+          <a class="btn" href="navi.html?room=5">講義室 5</a>
+          <a class="btn" href="navi.html?room=6">講義室 6</a>
+          <a class="btn" href="navi.html?room=7">講義室 7</a>
+          <a class="btn" href="navi.html?room=8">講義室 8</a>
+          <a class="btn" href="navi.html?room=9">講義室 9</a>
+          <a class="btn" href="navi.html?room=10">講義室 10</a>
+          <a class="btn" href="navi.html?room=11">講義室 11</a>
+        </div>
+      </div>
 
-    <script>
-        // 選択した目的地をURLパラメータで渡す
-        function goToDestination(room) {
-            // 遷移先を honbanAR2 → navi に修正
-            window.location.href = `navi.html?room=${room}`;
-        }
-    </script>
+      <div class="sect">
+        <div class="sect-title">その他</div>
+        <div class="grid" aria-label="その他の目的地">
+          <a class="btn" href="navi.html?room=gakumu">学務課</a>
+        </div>
+      </div>
+
+      <p class="note">
+        うまく表示されない場合は、ページを再読み込みしてください。<br />
+        GitHub Pages で運用する場合、<code>index.html</code> と <code>navi.html</code> は同じフォルダ直下に配置してください。
+      </p>
+    </main>
+  </div>
 </body>
 </html>
