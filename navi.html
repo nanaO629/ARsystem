@@ -1,143 +1,171 @@
-<!-- （headやA-Frame読み込みは今のままでOK） -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AR Navi</title>
 
-<script>
-  // 画像や文字が必ずカメラに正対する（ビルボード）
-  AFRAME.registerComponent('billboard', {
-    tick: function () {
-      const cam = this.el.sceneEl && this.el.sceneEl.camera;
-      if (cam) this.el.object3D.quaternion.copy(cam.quaternion);
-    }
-  });
-</script>
+  <!-- A-Frame (CDN) -->
+  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  <!-- AR.js (A-Frame版, CDN) -->
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.min.js"></script>
 
-<a-scene id="scene" embedded
-         arjs="detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false;">
-  <!-- ここで階段ピクトをプリロード。stairs.png を同じフォルダに置く -->
-  <a-assets timeout="20000" id="assets">
-    <img id="stairsImgAsset" src="stairs.png" crossorigin="anonymous">
-  </a-assets>
+  <script>
+    // 画像や文字を常にカメラに正対
+    AFRAME.registerComponent('billboard', {
+      tick: function () {
+        const cam = this.el.sceneEl && this.el.sceneEl.camera;
+        if (cam) this.el.object3D.quaternion.copy(cam.quaternion);
+      }
+    });
+  </script>
+</head>
+<body style="margin:0; overflow:hidden;">
 
-  <a-entity camera id="cam"></a-entity>
-</a-scene>
+  <a-scene id="scene"
+           embedded
+           renderer="alpha: true; antialias: true"
+           vr-mode-ui="enabled: false"
+           device-orientation-permission-ui="enabled: true"
+           arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false">
+    <!-- 階段ピクトをプリロード（stairs.png を同じフォルダに置く） -->
+    <a-assets timeout="20000" id="assets">
+      <img id="stairsImgAsset" src="stairs.png" crossorigin="anonymous">
+    </a-assets>
 
-<script>
-  // 向き→ヨー角（X=-90で寝かせ、Yだけ回す）
-  const yawMap = {'直進':0,'下':0,'うしろ':180,'右':-90,'左':90,'右斜め':-45,'左斜め':45};
-  const normalize = d => d==='ひだり'?'左':d;
+    <a-entity camera id="cam"></a-entity>
+  </a-scene>
 
-  // ★ここはあなたの既存planをそのまま使ってOK（3〜11, 学務課入り）
-  const plan = { /* ←前回渡した plan をそのまま貼る */ };
+  <script>
+    // 向き→ヨー角（X=-90で寝かせ、Yだけ回す）
+    const yawMap = {
+      '直進':0,'下':0,'うしろ':180,
+      '右':-90,'左':90,'右斜め':-45,'左斜め':45
+    };
+    const normalize = d => d==='ひだり'?'左':d;
 
-  const room = new URLSearchParams(location.search).get('room') || '3';
-  const scene = document.querySelector('#scene');
+    // 案内ルート定義（講義室3〜11・学務課）
+    const plan = {
+      '3':  {1:'右', 2:'うしろ',3:'うしろ', 4:'左',5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '4':  {1:'右', 2:'右', 3:'下', 4:'直進', 5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '5':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'直進', 6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '6':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'ひだり', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '7':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'右',   7:'直進',   8:'左斜め', 9:'左',10:'左',11:'左'},
+      '8':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'うしろ', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '9':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'階段', 7:'右',     8:'下',     9:'階段', 10:'左',11:'左'},
 
-  // 画像アセットのロード完了を待つフラグ
-  let stairsReady = false;
-  const assets = document.getElementById('assets');
-  assets.addEventListener('loaded', () => { stairsReady = true; });
+      '10': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左', 12:'左',13:'左', 14:'左', 15:'下', 16:'右',17:'右'},
+      '11': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
+             12:'左',13:'左',14:'左',15:'左',16:'左', 17:'下'},
 
-  scene.addEventListener('loaded', () => {
-    for (let i = 1; i <= 28; i++) {
-      // マーカー
-      const marker = document.createElement('a-marker');
-      marker.setAttribute('type','barcode');
-      marker.setAttribute('value', String(i));
-      marker.setAttribute('id', `marker-${i}`);
+      'gakumu': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
+                 12:'下',13:'下', 14:'右',15:'右',16:'右',17:'右'}
+    };
 
-      // 先輩方式の矢印
-      const wrap = document.createElement('a-entity');
-      wrap.setAttribute('id', `arrowWrap${i}`);
-      wrap.setAttribute('visible','true');
+    const room = new URLSearchParams(location.search).get('room') || '3';
+    const scene = document.querySelector('#scene');
 
-      const yawNode = document.createElement('a-entity');
-      yawNode.setAttribute('id', `arrowYaw${i}`);
-      yawNode.setAttribute('rotation','-90 0 0'); // 寝かせ固定
+    // アセットのロード完了フラグ
+    let stairsReady = false;
+    const assets = document.getElementById('assets');
+    assets.addEventListener('loaded', () => { stairsReady = true; });
 
-      const cone = document.createElement('a-cone');
-      cone.setAttribute('position','0 0.6 0');
-      cone.setAttribute('radius-bottom','0.4');
-      cone.setAttribute('radius-top','0');
-      cone.setAttribute('height','1.2');
-      cone.setAttribute('color','green');
+    scene.addEventListener('loaded', () => {
+      for (let i = 1; i <= 28; i++) {
+        const marker = document.createElement('a-marker');
+        marker.setAttribute('type','barcode');
+        marker.setAttribute('value', String(i));
+        marker.setAttribute('id', `marker-${i}`);
 
-      const cyl = document.createElement('a-cylinder');
-      cyl.setAttribute('position','0 0 0');
-      cyl.setAttribute('radius','0.12');
-      cyl.setAttribute('height','1.2');
-      cyl.setAttribute('color','green');
+        // 矢印（先輩方式）
+        const wrap = document.createElement('a-entity');
+        wrap.setAttribute('id', `arrowWrap${i}`);
+        wrap.setAttribute('visible','true');
 
-      yawNode.appendChild(cone);
-      yawNode.appendChild(cyl);
-      wrap.appendChild(yawNode);
+        const yawNode = document.createElement('a-entity');
+        yawNode.setAttribute('id', `arrowYaw${i}`);
+        yawNode.setAttribute('rotation','-90 0 0'); // X=-90で寝かせ固定
 
-      /* ===== 階段表示グループ（画像＋テキストの両方を用意） ===== */
-      const stairsGroup = document.createElement('a-entity');
-      stairsGroup.setAttribute('id', `stairsGroup${i}`);
-      stairsGroup.setAttribute('visible', 'false');
-      stairsGroup.setAttribute('billboard', '');               // 常にカメラ向き
-      stairsGroup.setAttribute('position', '0 1.05 0.28');     // マーカー面の少し手前(+Z)＆少し上
-      stairsGroup.setAttribute('scale', '1.8 1.8 1.8');
+        const cone = document.createElement('a-cone');
+        cone.setAttribute('position','0 0.6 0');
+        cone.setAttribute('radius-bottom','0.4');
+        cone.setAttribute('radius-top','0');
+        cone.setAttribute('height','1.2');
+        cone.setAttribute('color','green');
 
-      // 画像（PNG推奨：透明背景OK）
-      const stairsImg = document.createElement('a-plane');
-      stairsImg.setAttribute('id', `stairsImg${i}`);
-      stairsImg.setAttribute('width', '0.7');                  // ここで見た目サイズを調整
-      stairsImg.setAttribute('height', '0.7');
-      stairsImg.setAttribute('material', 'src: #stairsImgAsset; transparent: true; side: double; alphaTest: 0.01;');
-      // ※ a-image でも可だが、a-plane+material のほうが透明PNGで安定
+        const cyl = document.createElement('a-cylinder');
+        cyl.setAttribute('position','0 0 0');
+        cyl.setAttribute('radius','0.12');
+        cyl.setAttribute('height','1.2');
+        cyl.setAttribute('color','green');
 
-      // 画像が読めない時のフォールバック文字
-      const stairsText = document.createElement('a-entity');
-      stairsText.setAttribute('id', `stairsText${i}`);
-      stairsText.setAttribute('position', '0 0 0.001');        // 画像のほんの手前へ
-      stairsText.setAttribute('visible', 'false');
-      stairsText.setAttribute('text', {
-        value: '階段へ',
-        align: 'center',
-        color: 'red',
-        width: 2.6,
-        baseline: 'center',
-        wrapCount: 6
-      });
+        yawNode.appendChild(cone);
+        yawNode.appendChild(cyl);
+        wrap.appendChild(yawNode);
 
-      stairsGroup.appendChild(stairsImg);
-      stairsGroup.appendChild(stairsText);
+        // 階段グループ（画像＋文字）
+        const stairsGroup = document.createElement('a-entity');
+        stairsGroup.setAttribute('id', `stairsGroup${i}`);
+        stairsGroup.setAttribute('visible', 'false');
+        stairsGroup.setAttribute('billboard', '');
+        stairsGroup.setAttribute('position', '0 1.05 0.28');
+        stairsGroup.setAttribute('scale', '1.8 1.8 1.8');
 
-      // ツリー構築
-      marker.appendChild(wrap);
-      marker.appendChild(stairsGroup);
-      scene.appendChild(marker);
+        const stairsImg = document.createElement('a-plane');
+        stairsImg.setAttribute('id', `stairsImg${i}`);
+        stairsImg.setAttribute('width', '0.7');
+        stairsImg.setAttribute('height', '0.7');
+        stairsImg.setAttribute('material', 'src: #stairsImgAsset; transparent: true; side: double; alphaTest: 0.01;');
+        stairsImg.setAttribute('visible','false');
 
-      // 適用関数（初回＆markerFound時に呼ぶ）
-      const apply = () => {
-        const dirRaw = (plan[room] || {})[i];
-        if (!dirRaw) return; // 指定なしスキップ
-        const dir = normalize(dirRaw);
+        const stairsText = document.createElement('a-entity');
+        stairsText.setAttribute('id', `stairsText${i}`);
+        stairsText.setAttribute('position', '0 0 0.001');
+        stairsText.setAttribute('visible','false');
+        stairsText.setAttribute('text', {
+          value: '階段へ',
+          align: 'center',
+          color: 'red',
+          width: 2.6,
+          baseline: 'center',
+          wrapCount: 6
+        });
 
-        if (dir === '階段') {
-          // 矢印を隠し、階段グループを表示
-          wrap.setAttribute('visible','false');
-          stairsGroup.setAttribute('visible','true');
+        stairsGroup.appendChild(stairsImg);
+        stairsGroup.appendChild(stairsText);
 
-          // アセットが読み込み済みなら画像を出す、未ロードなら文字を出す
-          if (stairsReady) {
-            stairsImg.setAttribute('visible','true');
-            stairsText.setAttribute('visible','false');
+        marker.appendChild(wrap);
+        marker.appendChild(stairsGroup);
+        scene.appendChild(marker);
+
+        // 適用関数
+        const apply = () => {
+          const dirRaw = (plan[room] || {})[i];
+          if (!dirRaw) return;
+          const dir = normalize(dirRaw);
+
+          if (dir === '階段') {
+            wrap.setAttribute('visible','false');
+            stairsGroup.setAttribute('visible','true');
+            if (stairsReady) {
+              stairsImg.setAttribute('visible','true');
+              stairsText.setAttribute('visible','false');
+            } else {
+              stairsImg.setAttribute('visible','false');
+              stairsText.setAttribute('visible','true');
+            }
           } else {
-            stairsImg.setAttribute('visible','false');
-            stairsText.setAttribute('visible','true');
+            stairsGroup.setAttribute('visible','false');
+            wrap.setAttribute('visible','true');
+            const yaw = yawMap[dir] ?? 0;
+            yawNode.setAttribute('rotation', `-90 ${yaw} 0`);
           }
-        } else {
-          // 通常矢印
-          stairsGroup.setAttribute('visible','false');
-          wrap.setAttribute('visible','true');
-          const yaw = yawMap[dir] ?? 0;
-          yawNode.setAttribute('rotation', `-90 ${yaw} 0`);
-        }
-      };
+        };
 
-      apply();
-      marker.addEventListener('markerFound', apply);
-    }
-  });
-</script>
+        apply();
+        marker.addEventListener('markerFound', apply);
+      }
+    });
+  </script>
+</body>
+</html>
