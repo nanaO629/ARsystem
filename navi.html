@@ -5,131 +5,112 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>AR Navi</title>
 </head>
-<body style="margin:0px; overflow:hidden;">
-  <script src="aframe.min.js"></script>
-  <script src="aframe-ar.js"></script>
+<body style="margin:0; overflow:hidden;">
+  <!-- ローカルに置いた先輩と同じライブラリ -->
+  <script src="aframe.min.js"></script>   <!-- /mnt/data/aframe.min.js に相当 -->
+  <script src="aframe-ar.js"></script>    <!-- /mnt/data/aframe-ar.js に相当 -->
 
-  <a-scene embedded arjs="detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false;">
-    <script>
-      // マーカーを自動生成
-      for (let i = 0; i <= 28; i++) {
-        document.write(`
-          <a-marker type="barcode" value="${i}" id="marker-${i}">
-            <a-entity id="arrow${i}" rotation="0 0 0">
-              <a-cone position="0 0.6 0" radius-bottom="0.4" radius-top="0" height="1.2" color="green"></a-cone>
-              <a-cylinder position="0 0 0" radius="0.12" height="1.2" color="green"></a-cylinder>
-            </a-entity>
-            <a-text id="text${i}" value="" color="red" position="0 1.5 0" align="center" side="double" visible="false"></a-text>
-          </a-marker>
-        `);
-      }
-    </script>
+  <a-scene id="scene" embedded arjs="detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false;">
     <a-entity camera></a-entity>
   </a-scene>
 
   <script>
-    function setArrowDirection(markerId, direction) {
-      const arrow = document.querySelector(`#arrow${markerId}`);
-      const text = document.querySelector(`#text${markerId}`);
-      if (!arrow || !text) return;
+    // 方向→ヨー角（Y軸）: 矢印は X=-90° で「前＝-Z」基準にする
+    const yawMap = {
+      '直進': 0, '下': 0, 'うしろ': 180,
+      '右': -90, '左': 90, '右斜め': -45, '左斜め': 45
+    };
+    const normalize = d => d === 'ひだり' ? '左' : d;
 
-      // 階段の場合
-      if (direction === 'stairs') {
-        arrow.setAttribute("visible", "false");
-        text.setAttribute("value", "階段へ");
-        text.setAttribute("visible", "true");
-        return;
-      }
+    // 指定表（あなたの仕様そのまま）
+    const plan = {
+      '3': {1:'右', 2:'うしろ',3:'うしろ', 4:'左',5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '4': {1:'右', 2:'右', 3:'下', 4:'直進', 5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '5': {1:'右', 2:'右', 3:'下', 4:'右',   5:'直進', 6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '6': {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'ひだり', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '7': {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'右',   7:'直進',   8:'左斜め', 9:'左',10:'左',11:'左'},
+      '8': {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'うしろ', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '9': {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'階段', 7:'右',     8:'下',     9:'階段', 10:'左',11:'左'}
+    };
 
-      // 矢印を表示してテキストを隠す
-      arrow.setAttribute("visible", "true");
-      text.setAttribute("visible", "false");
+    // room パラメータ確認しやすいよう表示(デバッグ用・要らなければ消してOK)
+    const room = new URLSearchParams(location.search).get('room') || '3';
+    console.log('room=', room);
 
-      // 回転の指定
-      if (direction === 'right') {
-        arrow.setAttribute("rotation", "0 -90 0");
-      } else if (direction === 'left') {
-        arrow.setAttribute("rotation", "0 90 0");
-      } else if (direction === 'up') {
-        arrow.setAttribute("rotation", "0 0 0");
-      } else if (direction === 'down') {
-        arrow.setAttribute("rotation", "0 180 0");
-      } else if (direction === 'upleft') {
-        arrow.setAttribute("rotation", "0 45 0");
-      }
-    }
+    // マーカー生成 & 方向適用
+    const scene = document.querySelector('#scene');
+    scene.addEventListener('loaded', () => {
+      // 1〜28 を生成（必要数だけにしてOK）
+      for (let i = 1; i <= 28; i++) {
+        const marker = document.createElement('a-marker');
+        marker.setAttribute('type', 'barcode');
+        marker.setAttribute('value', String(i));
+        marker.setAttribute('id', `marker-${i}`);
 
-    // ページ読み込み後に目的地に応じたルートを設定
-    window.addEventListener("DOMContentLoaded", () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const room = urlParams.get('room');
+        // 矢印ラップ（表示/非表示切替用）
+        const wrap = document.createElement('a-entity');
+        wrap.setAttribute('id', `arrowWrap${i}`);
+        wrap.setAttribute('visible', 'true');
 
-      if (room === '3') {
-        setArrowDirection(1, 'right');
-        setArrowDirection(2, 'down');
-        setArrowDirection(3, 'down');
-        for (let i = 4; i <= 7; i++) setArrowDirection(i, 'left');
-        setArrowDirection(8, 'upleft');
-        for (let i = 9; i <= 11; i++) setArrowDirection(i, 'left');
-      } else if (room === '4') {
-        setArrowDirection(1, 'right');
-        setArrowDirection(2, 'right');
-        setArrowDirection(3, 'down');
-        setArrowDirection(4, 'up');
-        for (let i = 5; i <= 7; i++) setArrowDirection(i, 'left');
-        setArrowDirection(8, 'upleft');
-        for (let i = 9; i <= 11; i++) setArrowDirection(i, 'left');
-      } else if (room === '5') {
-        setArrowDirection(1, 'right');
-        setArrowDirection(2, 'right');
-        setArrowDirection(3, 'down');
-        setArrowDirection(4, 'right');
-        setArrowDirection(5, 'up');
-        for (let i = 6; i <= 7; i++) setArrowDirection(i, 'left');
-        setArrowDirection(8, 'upleft');
-        for (let i = 9; i <= 11; i++) setArrowDirection(i, 'left');
-      } else if (room === '6') {
-        setArrowDirection(1, 'right');
-        setArrowDirection(2, 'right');
-        setArrowDirection(3, 'down');
-        setArrowDirection(4, 'right');
-        setArrowDirection(5, 'right');
-        setArrowDirection(6, 'up');
-        setArrowDirection(7, 'left');
-        setArrowDirection(8, 'upleft');
-        for (let i = 9; i <= 11; i++) setArrowDirection(i, 'left');
-      } else if (room === '7') {
-        setArrowDirection(1, 'right');
-        setArrowDirection(2, 'right');
-        setArrowDirection(3, 'down');
-        setArrowDirection(4, 'right');
-        setArrowDirection(5, 'right');
-        setArrowDirection(6, 'right');
-        setArrowDirection(7, 'up');
-        setArrowDirection(8, 'upleft');
-        for (let i = 9; i <= 11; i++) setArrowDirection(i, 'left');
-      } else if (room === '8') {
-        setArrowDirection(1, 'right');
-        setArrowDirection(2, 'right');
-        setArrowDirection(3, 'down');
-        setArrowDirection(4, 'right');
-        setArrowDirection(5, 'right');
-        setArrowDirection(6, 'up');
-        setArrowDirection(7, 'down');
-        setArrowDirection(8, 'upleft');
-        for (let i = 9; i <= 11; i++) setArrowDirection(i, 'left');
-      } else if (room === '9') {
-        setArrowDirection(1, 'right');
-        setArrowDirection(2, 'right');
-        setArrowDirection(3, 'down');
-        setArrowDirection(4, 'right');
-        setArrowDirection(5, 'right');
-        setArrowDirection(6, 'stairs');
-        setArrowDirection(7, 'right');
-        setArrowDirection(8, 'down');
-        setArrowDirection(9, 'stairs');
-        setArrowDirection(10, 'left');
-        setArrowDirection(11, 'left');
+        // 回転用ノード：X=-90 で寝かせる → ここで常に横向き基準を作る
+        const yawNode = document.createElement('a-entity');
+        yawNode.setAttribute('id', `arrowYaw${i}`);
+        yawNode.setAttribute('rotation', '-90 0 0');
+
+        // 先輩と同じ cone + cylinder
+        const cone = document.createElement('a-cone');
+        cone.setAttribute('position', '0 0.6 0');
+        cone.setAttribute('radius-bottom', '0.4');
+        cone.setAttribute('radius-top', '0');
+        cone.setAttribute('height', '1.2');
+        cone.setAttribute('color', 'green');
+
+        const cyl = document.createElement('a-cylinder');
+        cyl.setAttribute('position', '0 0 0');
+        cyl.setAttribute('radius', '0.12');
+        cyl.setAttribute('height', '1.2');
+        cyl.setAttribute('color', 'green');
+
+        yawNode.appendChild(cone);
+        yawNode.appendChild(cyl);
+        wrap.appendChild(yawNode);
+
+        // 階段テキスト
+        const txt = document.createElement('a-text');
+        txt.setAttribute('id', `stairsText${i}`);
+        txt.setAttribute('value', '階段へ');
+        txt.setAttribute('color', 'red');
+        txt.setAttribute('position', '0 1.5 0');
+        txt.setAttribute('align', 'center');
+        txt.setAttribute('side', 'double');
+        txt.setAttribute('scale', '1.2 1.2 1.2');
+        txt.setAttribute('visible', 'false');
+
+        marker.appendChild(wrap);
+        marker.appendChild(txt);
+        scene.appendChild(marker);
+
+        // 方向を適用する関数（初回＆markerFound時に呼ぶ）
+        const apply = () => {
+          const dirRaw = (plan[room] || {})[i];
+          if (!dirRaw) return; // 指定なしの value はスキップ
+          const dir = normalize(dirRaw);
+
+          if (dir === '階段') {
+            wrap.setAttribute('visible', 'false');
+            txt.setAttribute('visible', 'true');
+          } else {
+            txt.setAttribute('visible', 'false');
+            wrap.setAttribute('visible', 'true');
+            const yaw = yawMap[dir] ?? 0;
+            yawNode.setAttribute('rotation', `-90 ${yaw} 0`);
+          }
+        };
+
+        // 生成直後に一度適用
+        apply();
+        // マーカー検出のたびに再適用（初期化順や内部上書きの影響を防ぐ）
+        marker.addEventListener('markerFound', apply);
       }
     });
   </script>
