@@ -11,12 +11,13 @@
 
   <a-scene embedded arjs="detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false;">
     <script>
-      // マーカーを書き出す
+      // マーカーを自動生成
       for (let i = 0; i <= 28; i++) {
         document.write(`
           <a-marker type="barcode" value="${i}" id="marker-${i}">
             <a-cone id="arrow${i}-cone" position="0 1 0" radius-bottom="0.4" radius-top="0" height="1.2" color="green"></a-cone>
             <a-cylinder id="arrow${i}-cylinder" position="0 0.7 0" radius="0.12" height="1.6" color="green"></a-cylinder>
+            <a-text id="text${i}" value="" color="red" position="0 1 0" align="center" visible="false"></a-text>
           </a-marker>
         `);
       }
@@ -28,50 +29,69 @@
     function setArrowDirection(markerId, direction) {
       const cone = document.querySelector(`#arrow${markerId}-cone`);
       const cylinder = document.querySelector(`#arrow${markerId}-cylinder`);
-      if (!cone || !cylinder) return;
+      const text = document.querySelector(`#text${markerId}`);
+      if (!cone || !cylinder || !text) return;
+
+      if (direction === 'stairs') {
+        cone.setAttribute("visible", "false");
+        cylinder.setAttribute("visible", "false");
+        text.setAttribute("value", "階段へ");
+        text.setAttribute("visible", "true");
+        return;
+      }
+
+      // 矢印を表示してテキストを隠す
+      cone.setAttribute("visible", "true");
+      cylinder.setAttribute("visible", "true");
+      text.setAttribute("visible", "false");
 
       if (direction === 'right') {
         cone.setAttribute("rotation", "0 0 -90");
-        cylinder.setAttribute("rotation", "0 0 90");
         cone.setAttribute("position", "0.7 0 0");
       } else if (direction === 'left') {
         cone.setAttribute("rotation", "0 0 90");
-        cylinder.setAttribute("rotation", "0 0 -90");
         cone.setAttribute("position", "-0.7 0 0");
       } else if (direction === 'up') {
         cone.setAttribute("rotation", "0 0 0");
-        cylinder.setAttribute("rotation", "0 0 0");
         cone.setAttribute("position", "0 0.7 0");
       } else if (direction === 'down') {
         cone.setAttribute("rotation", "0 180 0");
-        cylinder.setAttribute("rotation", "0 180 0");
         cone.setAttribute("position", "0 -0.7 0");
+      } else if (direction === 'upleft') {
+        cone.setAttribute("rotation", "0 45 0");
+        cone.setAttribute("position", "-0.5 0.5 0");
       }
     }
 
-    // DOM構築が終わってから処理する
+    // DOM構築後に処理
     window.addEventListener("DOMContentLoaded", () => {
       const urlParams = new URLSearchParams(window.location.search);
       const room = urlParams.get('room');
 
       if (room === '3') {
         setArrowDirection(1, 'right');
-        setArrowDirection(2, 'up');
-        setArrowDirection(3, 'up');
-        for (let i = 4; i <= 9; i++) setArrowDirection(i, 'left');
+        setArrowDirection(2, 'down');
+        setArrowDirection(3, 'down');
+        for (let i = 4; i <= 7; i++) setArrowDirection(i, 'left');
+        setArrowDirection(8, 'upleft');
+        for (let i = 9; i <= 11; i++) setArrowDirection(i, 'left');
       } else if (room === '4') {
         setArrowDirection(1, 'right');
         setArrowDirection(2, 'right');
         setArrowDirection(3, 'down');
         setArrowDirection(4, 'up');
-        for (let i = 5; i <= 9; i++) setArrowDirection(i, 'left');
+        for (let i = 5; i <= 7; i++) setArrowDirection(i, 'left');
+        setArrowDirection(8, 'upleft');
+        for (let i = 9; i <= 11; i++) setArrowDirection(i, 'left');
       } else if (room === '5') {
         setArrowDirection(1, 'right');
         setArrowDirection(2, 'right');
         setArrowDirection(3, 'down');
         setArrowDirection(4, 'right');
         setArrowDirection(5, 'up');
-        for (let i = 6; i <= 9; i++) setArrowDirection(i, 'left');
+        for (let i = 6; i <= 7; i++) setArrowDirection(i, 'left');
+        setArrowDirection(8, 'upleft');
+        for (let i = 9; i <= 11; i++) setArrowDirection(i, 'left');
       } else if (room === '6') {
         setArrowDirection(1, 'right');
         setArrowDirection(2, 'right');
@@ -79,7 +99,9 @@
         setArrowDirection(4, 'right');
         setArrowDirection(5, 'right');
         setArrowDirection(6, 'up');
-        for (let i = 7; i <= 9; i++) setArrowDirection(i, 'left');
+        setArrowDirection(7, 'left');
+        setArrowDirection(8, 'upleft');
+        for (let i = 9; i <= 11; i++) setArrowDirection(i, 'left');
       } else if (room === '7') {
         setArrowDirection(1, 'right');
         setArrowDirection(2, 'right');
@@ -88,8 +110,8 @@
         setArrowDirection(5, 'right');
         setArrowDirection(6, 'right');
         setArrowDirection(7, 'up');
-        setArrowDirection(8, 'left');
-        setArrowDirection(9, 'left');
+        setArrowDirection(8, 'upleft');
+        for (let i = 9; i <= 11; i++) setArrowDirection(i, 'left');
       } else if (room === '8') {
         setArrowDirection(1, 'right');
         setArrowDirection(2, 'right');
@@ -97,9 +119,21 @@
         setArrowDirection(4, 'right');
         setArrowDirection(5, 'right');
         setArrowDirection(6, 'up');
-        setArrowDirection(7, 'up');
-        setArrowDirection(8, 'left');
-        setArrowDirection(9, 'left');
+        setArrowDirection(7, 'down');
+        setArrowDirection(8, 'upleft');
+        for (let i = 9; i <= 11; i++) setArrowDirection(i, 'left');
+      } else if (room === '9') {
+        setArrowDirection(1, 'right');
+        setArrowDirection(2, 'right');
+        setArrowDirection(3, 'down');
+        setArrowDirection(4, 'right');
+        setArrowDirection(5, 'right');
+        setArrowDirection(6, 'stairs');
+        setArrowDirection(7, 'right');
+        setArrowDirection(8, 'down');
+        setArrowDirection(9, 'stairs');
+        setArrowDirection(10, 'left');
+        setArrowDirection(11, 'left');
       }
     });
   </script>
