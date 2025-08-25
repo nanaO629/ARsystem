@@ -6,110 +6,115 @@
   <title>AR Navi</title>
 </head>
 <body style="margin:0; overflow:hidden;">
-  <!-- ローカルに置いた先輩と同じライブラリ -->
-  <script src="aframe.min.js"></script>   <!-- /mnt/data/aframe.min.js に相当 -->
-  <script src="aframe-ar.js"></script>    <!-- /mnt/data/aframe-ar.js に相当 -->
+  <script src="aframe.min.js"></script>
+  <script src="aframe-ar.js"></script>
 
-  <a-scene id="scene" embedded arjs="detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false;">
-    <a-entity camera></a-entity>
+  <script>
+    // テキストを常にカメラの向きに合わせる（ビルボード）
+    AFRAME.registerComponent('billboard', {
+      tick: function () {
+        const cam = this.el.sceneEl && this.el.sceneEl.camera;
+        if (!cam) return;
+        this.el.object3D.quaternion.copy(cam.quaternion);
+      }
+    });
+  </script>
+
+  <a-scene id="scene" embedded
+           arjs="detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false;">
+    <a-entity camera id="cam"></a-entity>
   </a-scene>
 
   <script>
-    // 方向→ヨー角（Y軸）: 矢印は X=-90° で「前＝-Z」基準にする
-    const yawMap = {
-      '直進': 0, '下': 0, 'うしろ': 180,
-      '右': -90, '左': 90, '右斜め': -45, '左斜め': 45
-    };
-    const normalize = d => d === 'ひだり' ? '左' : d;
+    const yawMap = {'直進':0,'下':0,'うしろ':180,'右':-90,'左':90,'右斜め':-45,'左斜め':45};
+    const normalize = d => d==='ひだり'?'左':d;
 
-    // 指定表（あなたの仕様そのまま）
     const plan = {
-      '3': {1:'右', 2:'うしろ',3:'うしろ', 4:'左',5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
-      '4': {1:'右', 2:'右', 3:'下', 4:'直進', 5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
-      '5': {1:'右', 2:'右', 3:'下', 4:'右',   5:'直進', 6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
-      '6': {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'ひだり', 8:'左斜め', 9:'左',10:'左',11:'左'},
-      '7': {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'右',   7:'直進',   8:'左斜め', 9:'左',10:'左',11:'左'},
-      '8': {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'うしろ', 8:'左斜め', 9:'左',10:'左',11:'左'},
-      '9': {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'階段', 7:'右',     8:'下',     9:'階段', 10:'左',11:'左'}
+      '3': {1:'右',2:'うしろ',3:'うしろ',4:'左',5:'左',6:'左',7:'左',8:'左斜め',9:'左',10:'左',11:'左'},
+      '4': {1:'右',2:'右',3:'下',4:'直進',5:'左',6:'左',7:'左',8:'左斜め',9:'左',10:'左',11:'左'},
+      '5': {1:'右',2:'右',3:'下',4:'右',5:'直進',6:'左',7:'左',8:'左斜め',9:'左',10:'左',11:'左'},
+      '6': {1:'右',2:'右',3:'下',4:'右',5:'右',6:'直進',7:'ひだり',8:'左斜め',9:'左',10:'左',11:'左'},
+      '7': {1:'右',2:'右',3:'下',4:'右',5:'右',6:'右',7:'直進',8:'左斜め',9:'左',10:'左',11:'左'},
+      '8': {1:'右',2:'右',3:'下',4:'右',5:'右',6:'直進',7:'うしろ',8:'左斜め',9:'左',10:'左',11:'左'},
+      '9': {1:'右',2:'右',3:'下',4:'右',5:'右',6:'階段',7:'右',8:'下',9:'階段',10:'左',11:'左'}
     };
 
-    // room パラメータ確認しやすいよう表示(デバッグ用・要らなければ消してOK)
     const room = new URLSearchParams(location.search).get('room') || '3';
-    console.log('room=', room);
 
-    // マーカー生成 & 方向適用
     const scene = document.querySelector('#scene');
     scene.addEventListener('loaded', () => {
-      // 1〜28 を生成（必要数だけにしてOK）
       for (let i = 1; i <= 28; i++) {
         const marker = document.createElement('a-marker');
-        marker.setAttribute('type', 'barcode');
+        marker.setAttribute('type','barcode');
         marker.setAttribute('value', String(i));
         marker.setAttribute('id', `marker-${i}`);
 
-        // 矢印ラップ（表示/非表示切替用）
+        // ===== 矢印（先輩方式） =====
         const wrap = document.createElement('a-entity');
         wrap.setAttribute('id', `arrowWrap${i}`);
-        wrap.setAttribute('visible', 'true');
+        wrap.setAttribute('visible','true');
 
-        // 回転用ノード：X=-90 で寝かせる → ここで常に横向き基準を作る
         const yawNode = document.createElement('a-entity');
         yawNode.setAttribute('id', `arrowYaw${i}`);
-        yawNode.setAttribute('rotation', '-90 0 0');
+        yawNode.setAttribute('rotation','-90 0 0'); // X=-90で寝かせる（前=-Z 基準）
 
-        // 先輩と同じ cone + cylinder
         const cone = document.createElement('a-cone');
-        cone.setAttribute('position', '0 0.6 0');
-        cone.setAttribute('radius-bottom', '0.4');
-        cone.setAttribute('radius-top', '0');
-        cone.setAttribute('height', '1.2');
-        cone.setAttribute('color', 'green');
+        cone.setAttribute('position','0 0.6 0');
+        cone.setAttribute('radius-bottom','0.4');
+        cone.setAttribute('radius-top','0');
+        cone.setAttribute('height','1.2');
+        cone.setAttribute('color','green');
 
         const cyl = document.createElement('a-cylinder');
-        cyl.setAttribute('position', '0 0 0');
-        cyl.setAttribute('radius', '0.12');
-        cyl.setAttribute('height', '1.2');
-        cyl.setAttribute('color', 'green');
+        cyl.setAttribute('position','0 0 0');
+        cyl.setAttribute('radius','0.12');
+        cyl.setAttribute('height','1.2');
+        cyl.setAttribute('color','green');
 
         yawNode.appendChild(cone);
         yawNode.appendChild(cyl);
         wrap.appendChild(yawNode);
 
-        // 階段テキスト
-        const txt = document.createElement('a-text');
+        // ===== 階段テキスト（textコンポーネントで安定表示） =====
+        const txt = document.createElement('a-entity');
         txt.setAttribute('id', `stairsText${i}`);
-        txt.setAttribute('value', '階段へ');
-        txt.setAttribute('color', 'red');
-        txt.setAttribute('position', '0 1.5 0');
-        txt.setAttribute('align', 'center');
-        txt.setAttribute('side', 'double');
-        txt.setAttribute('scale', '1.2 1.2 1.2');
-        txt.setAttribute('visible', 'false');
+        // マーカー面から手前（+Z）＆少し上へ
+        txt.setAttribute('position','0 1.1 0.35');
+        txt.setAttribute('billboard','');         // 常にカメラ向き
+        txt.setAttribute('visible','false');
+        // text コンポーネント設定（読みやすさ重視）
+        txt.setAttribute('text', {
+          value: '階段へ',
+          align: 'center',
+          color: 'red',
+          width: 2.8,            // 文字幅（必要なら 3〜4 へ）
+          baseline: 'center',
+          wrapCount: 6
+        });
+        // さらに大きくしたければ scale を上げる（例: 2.2）
+        txt.setAttribute('scale', '1.9 1.9 1.9');
 
         marker.appendChild(wrap);
         marker.appendChild(txt);
         scene.appendChild(marker);
 
-        // 方向を適用する関数（初回＆markerFound時に呼ぶ）
         const apply = () => {
           const dirRaw = (plan[room] || {})[i];
-          if (!dirRaw) return; // 指定なしの value はスキップ
+          if (!dirRaw) return;
           const dir = normalize(dirRaw);
 
           if (dir === '階段') {
-            wrap.setAttribute('visible', 'false');
-            txt.setAttribute('visible', 'true');
+            wrap.setAttribute('visible','false');
+            txt.setAttribute('visible','true');
           } else {
-            txt.setAttribute('visible', 'false');
-            wrap.setAttribute('visible', 'true');
+            txt.setAttribute('visible','false');
+            wrap.setAttribute('visible','true');
             const yaw = yawMap[dir] ?? 0;
             yawNode.setAttribute('rotation', `-90 ${yaw} 0`);
           }
         };
 
-        // 生成直後に一度適用
         apply();
-        // マーカー検出のたびに再適用（初期化順や内部上書きの影響を防ぐ）
         marker.addEventListener('markerFound', apply);
       }
     });
