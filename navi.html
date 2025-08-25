@@ -15,9 +15,11 @@
       for (let i = 0; i <= 28; i++) {
         document.write(`
           <a-marker type="barcode" value="${i}" id="marker-${i}">
-            <a-cone id="arrow${i}-cone" position="0 1 0" radius-bottom="0.4" radius-top="0" height="1.2" color="green"></a-cone>
-            <a-cylinder id="arrow${i}-cylinder" position="0 0.7 0" radius="0.12" height="1.6" color="green"></a-cylinder>
-            <a-text id="text${i}" value="" color="red" position="0 1 0" align="center" visible="false"></a-text>
+            <a-entity id="arrow${i}" rotation="0 0 0">
+              <a-cone position="0 0.6 0" radius-bottom="0.4" radius-top="0" height="1.2" color="green"></a-cone>
+              <a-cylinder position="0 0 0" radius="0.12" height="1.2" color="green"></a-cylinder>
+            </a-entity>
+            <a-text id="text${i}" value="" color="red" position="0 1.5 0" align="center" side="double" visible="false"></a-text>
           </a-marker>
         `);
       }
@@ -27,43 +29,37 @@
 
   <script>
     function setArrowDirection(markerId, direction) {
-      const cone = document.querySelector(`#arrow${markerId}-cone`);
-      const cylinder = document.querySelector(`#arrow${markerId}-cylinder`);
+      const arrow = document.querySelector(`#arrow${markerId}`);
       const text = document.querySelector(`#text${markerId}`);
-      if (!cone || !cylinder || !text) return;
+      if (!arrow || !text) return;
 
+      // 階段の場合
       if (direction === 'stairs') {
-        cone.setAttribute("visible", "false");
-        cylinder.setAttribute("visible", "false");
+        arrow.setAttribute("visible", "false");
         text.setAttribute("value", "階段へ");
         text.setAttribute("visible", "true");
         return;
       }
 
       // 矢印を表示してテキストを隠す
-      cone.setAttribute("visible", "true");
-      cylinder.setAttribute("visible", "true");
+      arrow.setAttribute("visible", "true");
       text.setAttribute("visible", "false");
 
+      // 回転の指定
       if (direction === 'right') {
-        cone.setAttribute("rotation", "0 0 -90");
-        cone.setAttribute("position", "0.7 0 0");
+        arrow.setAttribute("rotation", "0 -90 0");
       } else if (direction === 'left') {
-        cone.setAttribute("rotation", "0 0 90");
-        cone.setAttribute("position", "-0.7 0 0");
+        arrow.setAttribute("rotation", "0 90 0");
       } else if (direction === 'up') {
-        cone.setAttribute("rotation", "0 0 0");
-        cone.setAttribute("position", "0 0.7 0");
+        arrow.setAttribute("rotation", "0 0 0");
       } else if (direction === 'down') {
-        cone.setAttribute("rotation", "0 180 0");
-        cone.setAttribute("position", "0 -0.7 0");
+        arrow.setAttribute("rotation", "0 180 0");
       } else if (direction === 'upleft') {
-        cone.setAttribute("rotation", "0 45 0");
-        cone.setAttribute("position", "-0.5 0.5 0");
+        arrow.setAttribute("rotation", "0 45 0");
       }
     }
 
-    // DOM構築後に処理
+    // ページ読み込み後に目的地に応じたルートを設定
     window.addEventListener("DOMContentLoaded", () => {
       const urlParams = new URLSearchParams(window.location.search);
       const room = urlParams.get('room');
