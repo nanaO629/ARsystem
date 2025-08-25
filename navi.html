@@ -22,40 +22,35 @@
 </head>
 <body style="margin: 0; overflow: hidden;">
   <div class="label" id="stairsLabel">階段へ</div>
-  
+
   <a-scene embedded arjs="sourceType: webcam;">
     <!-- カメラ -->
     <a-camera position="0 1.6 0"></a-camera>
 
-    <!-- マーカーごとの表示要素 -->
+    <!-- GLBモデルの読み込み -->
     <a-assets>
-      <img id="arrow-right" src="arrow_right.png" />
-      <img id="arrow-left" src="arrow_left.png" />
-      <img id="arrow-back" src="arrow_back.png" />
-      <img id="arrow-down" src="arrow_down.png" />
-      <img id="arrow-straight" src="arrow_straight.png" />
-      <img id="arrow-diagonal-left" src="arrow_diagonal_left.png" />
+      <a-asset-item id="arrow-model" src="arrow.glb"></a-asset-item>
     </a-assets>
 
-    <!-- 11個のマーカーを配置 -->
-    <a-marker id="marker1" type="barcode" value="1"></a-marker>
-    <a-marker id="marker2" type="barcode" value="2"></a-marker>
-    <a-marker id="marker3" type="barcode" value="3"></a-marker>
-    <a-marker id="marker4" type="barcode" value="4"></a-marker>
-    <a-marker id="marker5" type="barcode" value="5"></a-marker>
-    <a-marker id="marker6" type="barcode" value="6"></a-marker>
-    <a-marker id="marker7" type="barcode" value="7"></a-marker>
-    <a-marker id="marker8" type="barcode" value="8"></a-marker>
-    <a-marker id="marker9" type="barcode" value="9"></a-marker>
-    <a-marker id="marker10" type="barcode" value="10"></a-marker>
-    <a-marker id="marker11" type="barcode" value="11"></a-marker>
+    <!-- マーカー11個 -->
+    <a-marker id="marker1" type="barcode" value="1"><a-gltf-model id="arrow1" src="#arrow-model" scale="0.5 0.5 0.5" rotation="0 0 0" visible="false"></a-gltf-model></a-marker>
+    <a-marker id="marker2" type="barcode" value="2"><a-gltf-model id="arrow2" src="#arrow-model" scale="0.5 0.5 0.5" rotation="0 0 0" visible="false"></a-gltf-model></a-marker>
+    <a-marker id="marker3" type="barcode" value="3"><a-gltf-model id="arrow3" src="#arrow-model" scale="0.5 0.5 0.5" rotation="0 0 0" visible="false"></a-gltf-model></a-marker>
+    <a-marker id="marker4" type="barcode" value="4"><a-gltf-model id="arrow4" src="#arrow-model" scale="0.5 0.5 0.5" rotation="0 0 0" visible="false"></a-gltf-model></a-marker>
+    <a-marker id="marker5" type="barcode" value="5"><a-gltf-model id="arrow5" src="#arrow-model" scale="0.5 0.5 0.5" rotation="0 0 0" visible="false"></a-gltf-model></a-marker>
+    <a-marker id="marker6" type="barcode" value="6"><a-gltf-model id="arrow6" src="#arrow-model" scale="0.5 0.5 0.5" rotation="0 0 0" visible="false"></a-gltf-model></a-marker>
+    <a-marker id="marker7" type="barcode" value="7"><a-gltf-model id="arrow7" src="#arrow-model" scale="0.5 0.5 0.5" rotation="0 0 0" visible="false"></a-gltf-model></a-marker>
+    <a-marker id="marker8" type="barcode" value="8"><a-gltf-model id="arrow8" src="#arrow-model" scale="0.5 0.5 0.5" rotation="0 0 0" visible="false"></a-gltf-model></a-marker>
+    <a-marker id="marker9" type="barcode" value="9"><a-gltf-model id="arrow9" src="#arrow-model" scale="0.5 0.5 0.5" rotation="0 0 0" visible="false"></a-gltf-model></a-marker>
+    <a-marker id="marker10" type="barcode" value="10"><a-gltf-model id="arrow10" src="#arrow-model" scale="0.5 0.5 0.5" rotation="0 0 0" visible="false"></a-gltf-model></a-marker>
+    <a-marker id="marker11" type="barcode" value="11"><a-gltf-model id="arrow11" src="#arrow-model" scale="0.5 0.5 0.5" rotation="0 0 0" visible="false"></a-gltf-model></a-marker>
   </a-scene>
 
   <script>
     const stairsLabel = document.getElementById("stairsLabel");
     const destination = sessionStorage.getItem("destination");
 
-    // 講義室ごとのルート情報
+    // ルート情報
     const routes = {
       "講義室3": {1:"右",2:"うしろ",3:"うしろ",4:"左",5:"左",6:"左",7:"左",8:"左斜め",9:"左",10:"左",11:"左"},
       "講義室4": {1:"右",2:"右",3:"下",4:"直進",5:"左",6:"左",7:"左",8:"左斜め",9:"左",10:"左",11:"左"},
@@ -66,34 +61,30 @@
       "講義室9": {1:"右",2:"右",3:"下",4:"右",5:"右",6:"階段",7:"右",8:"下",9:"階段",10:"左",11:"左"}
     };
 
-    // 矢印画像をマーカーに表示する関数
-    function setArrow(markerId, direction) {
-      const marker = document.getElementById(markerId);
-      if (!marker) return;
+    // 矢印の向きをマッピング
+    const rotationMap = {
+      "右": "0 90 0",
+      "左": "0 -90 0",
+      "うしろ": "0 180 0",
+      "下": "0 180 0",
+      "直進": "0 0 0",
+      "左斜め": "0 -45 0"
+    };
 
-      // 階段の場合 → ラベル表示して矢印は非表示
+    // 矢印を設定
+    Object.keys(routes[destination]).forEach(value => {
+      const direction = routes[destination][value];
+      const arrow = document.getElementById(`arrow${value}`);
+
       if (direction === "階段") {
+        arrow.setAttribute("visible", false);
         stairsLabel.style.display = "block";
-        marker.innerHTML = "";
         return;
       }
 
       stairsLabel.style.display = "none";
-      let imgId = "";
-      switch(direction) {
-        case "右": imgId = "arrow-right"; break;
-        case "左": imgId = "arrow-left"; break;
-        case "うしろ": imgId = "arrow-back"; break;
-        case "下": imgId = "arrow-down"; break;
-        case "直進": imgId = "arrow-straight"; break;
-        case "左斜め": imgId = "arrow-diagonal-left"; break;
-      }
-      marker.innerHTML = `<a-image src="#${imgId}" position="0 0 0" rotation="-90 0 0" scale="1 1 1"></a-image>`;
-    }
-
-    // 現在の目的地に応じてルート設定
-    Object.keys(routes[destination]).forEach(value => {
-      setArrow("marker" + value, routes[destination][value]);
+      arrow.setAttribute("rotation", rotationMap[direction]);
+      arrow.setAttribute("visible", true);
     });
   </script>
 </body>
