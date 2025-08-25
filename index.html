@@ -1,40 +1,69 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <title>目的地選択</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin-top: 50px;
-    }
-    button {
-      width: 200px;
-      padding: 10px;
-      margin: 8px;
-      font-size: 18px;
-      cursor: pointer;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>目的地選択</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            width: 300px;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
 </head>
 <body>
-  <h1>目的地を選択</h1>
-  <button onclick="selectDestination('講義室3')">講義室3</button>
-  <button onclick="selectDestination('講義室4')">講義室4</button>
-  <button onclick="selectDestination('講義室5')">講義室5</button>
-  <button onclick="selectDestination('講義室6')">講義室6</button>
-  <button onclick="selectDestination('講義室7')">講義室7</button>
-  <button onclick="selectDestination('講義室8')">講義室8</button>
-  <button onclick="selectDestination('講義室9')">講義室9</button>
+    <div class="container">
+        <h2>目的地を選択してください</h2>
+        <button onclick="goToDestination(3)">講義室 3</button>
+        <button onclick="goToDestination(4)">講義室 4</button>
+        <button onclick="goToDestination(5)">講義室 5</button>
+        <button onclick="goToDestination(6)">講義室 6</button>
+        <button onclick="goToDestination(7)">講義室 7</button>
+        <button onclick="goToDestination(8)">講義室 8</button>
+        <button onclick="goToDestination(9)">講義室 9</button>
+    </div>
 
-  <script>
-    function selectDestination(dest) {
-      sessionStorage.setItem("destination", dest);
-      location.href = "navi.html";
-    }
-  </script>
+    <script>
+        // 選択した目的地をURLパラメータで渡す
+        function goToDestination(room) {
+            window.location.href = `honbanAR2.html?room=${room}`;
+        }
+    </script>
 </body>
 </html>
