@@ -3,59 +3,105 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>ARナビゲーション</title>
+  <title>AR Navi</title>
+</head>
+<body style="margin:0px; overflow:hidden;">
   <script src="aframe.min.js"></script>
   <script src="aframe-ar.js"></script>
-</head>
-<body style="margin:0; overflow:hidden;">
+
   <a-scene embedded arjs="detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false;">
     <script>
-      // 矢印の角度設定（右、左、うしろ、斜めなど）
-      const rotationMap = {
-        "右": "0 90 0",
-        "左": "0 -90 0",
-        "うしろ": "0 180 0",
-        "下": "0 0 0",
-        "直進": "0 0 0",
-        "左斜め": "0 -45 0",
-        "右斜め": "0 45 0"
-      };
-
-      // 講義室ごとのマーカー → 矢印向き
-      const arrowSettings = {
-        3: { 1:"右", 2:"うしろ", 3:"うしろ", 4:"左", 5:"左", 6:"左", 7:"左", 8:"左斜め", 9:"左", 10:"左", 11:"左" },
-        4: { 1:"右", 2:"右", 3:"下", 4:"直進", 5:"左", 6:"左", 7:"左", 8:"左斜め", 9:"左", 10:"左", 11:"左" },
-        5: { 1:"右", 2:"右", 3:"下", 4:"右", 5:"直進", 6:"左", 7:"左", 8:"左斜め", 9:"左", 10:"左", 11:"左" },
-        6: { 1:"右", 2:"右", 3:"下", 4:"右", 5:"右", 6:"直進", 7:"左", 8:"左斜め", 9:"左", 10:"左", 11:"左" },
-        7: { 1:"右", 2:"右", 3:"下", 4:"右", 5:"右", 6:"右", 7:"直進", 8:"左斜め", 9:"左", 10:"左", 11:"左" },
-        8: { 1:"右", 2:"右", 3:"下", 4:"右", 5:"右", 6:"直進", 7:"うしろ", 8:"左斜め", 9:"左", 10:"左", 11:"左" },
-        9: { 1:"右", 2:"右", 3:"下", 4:"右", 5:"右", 6:"階段", 7:"右", 8:"下", 9:"階段", 10:"左", 11:"左" }
-      };
-
-      // URLから目的地を取得
-      const urlParams = new URLSearchParams(window.location.search);
-      const room = parseInt(urlParams.get('room')) || 3;
-
-      // マーカーを生成
-      for (let i = 1; i <= 28; i++) {
-        const direction = arrowSettings[room]?.[i];
-        const rotation = rotationMap[direction] || "0 0 0";
-
+      // マーカーを書き出す
+      for (let i = 0; i <= 28; i++) {
         document.write(`
           <a-marker type="barcode" value="${i}" id="marker-${i}">
-            ${
-              direction === "階段"
-                ? `<a-text value="階段へ" color="red" position="0 1 0" align="center"></a-text>`
-                : `
-                  <a-cone position="0 1 0" radius-bottom="0.4" radius-top="0" height="1.2" color="green" rotation="${rotation}"></a-cone>
-                  <a-cylinder position="0 0.7 0" radius="0.12" height="1.6" color="green" rotation="${rotation}"></a-cylinder>
-                `
-            }
+            <a-cone id="arrow${i}-cone" position="0 1 0" radius-bottom="0.4" radius-top="0" height="1.2" color="green"></a-cone>
+            <a-cylinder id="arrow${i}-cylinder" position="0 0.7 0" radius="0.12" height="1.6" color="green"></a-cylinder>
           </a-marker>
         `);
       }
     </script>
     <a-entity camera></a-entity>
   </a-scene>
+
+  <script>
+    function setArrowDirection(markerId, direction) {
+      const cone = document.querySelector(`#arrow${markerId}-cone`);
+      const cylinder = document.querySelector(`#arrow${markerId}-cylinder`);
+      if (!cone || !cylinder) return;
+
+      if (direction === 'right') {
+        cone.setAttribute("rotation", "0 0 -90");
+        cylinder.setAttribute("rotation", "0 0 90");
+        cone.setAttribute("position", "0.7 0 0");
+      } else if (direction === 'left') {
+        cone.setAttribute("rotation", "0 0 90");
+        cylinder.setAttribute("rotation", "0 0 -90");
+        cone.setAttribute("position", "-0.7 0 0");
+      } else if (direction === 'up') {
+        cone.setAttribute("rotation", "0 0 0");
+        cylinder.setAttribute("rotation", "0 0 0");
+        cone.setAttribute("position", "0 0.7 0");
+      } else if (direction === 'down') {
+        cone.setAttribute("rotation", "0 180 0");
+        cylinder.setAttribute("rotation", "0 180 0");
+        cone.setAttribute("position", "0 -0.7 0");
+      }
+    }
+
+    // DOM構築が終わってから処理する
+    window.addEventListener("DOMContentLoaded", () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const room = urlParams.get('room');
+
+      if (room === '3') {
+        setArrowDirection(1, 'right');
+        setArrowDirection(2, 'up');
+        setArrowDirection(3, 'up');
+        for (let i = 4; i <= 9; i++) setArrowDirection(i, 'left');
+      } else if (room === '4') {
+        setArrowDirection(1, 'right');
+        setArrowDirection(2, 'right');
+        setArrowDirection(3, 'down');
+        setArrowDirection(4, 'up');
+        for (let i = 5; i <= 9; i++) setArrowDirection(i, 'left');
+      } else if (room === '5') {
+        setArrowDirection(1, 'right');
+        setArrowDirection(2, 'right');
+        setArrowDirection(3, 'down');
+        setArrowDirection(4, 'right');
+        setArrowDirection(5, 'up');
+        for (let i = 6; i <= 9; i++) setArrowDirection(i, 'left');
+      } else if (room === '6') {
+        setArrowDirection(1, 'right');
+        setArrowDirection(2, 'right');
+        setArrowDirection(3, 'down');
+        setArrowDirection(4, 'right');
+        setArrowDirection(5, 'right');
+        setArrowDirection(6, 'up');
+        for (let i = 7; i <= 9; i++) setArrowDirection(i, 'left');
+      } else if (room === '7') {
+        setArrowDirection(1, 'right');
+        setArrowDirection(2, 'right');
+        setArrowDirection(3, 'down');
+        setArrowDirection(4, 'right');
+        setArrowDirection(5, 'right');
+        setArrowDirection(6, 'right');
+        setArrowDirection(7, 'up');
+        setArrowDirection(8, 'left');
+        setArrowDirection(9, 'left');
+      } else if (room === '8') {
+        setArrowDirection(1, 'right');
+        setArrowDirection(2, 'right');
+        setArrowDirection(3, 'down');
+        setArrowDirection(4, 'right');
+        setArrowDirection(5, 'right');
+        setArrowDirection(6, 'up');
+        setArrowDirection(7, 'up');
+        setArrowDirection(8, 'left');
+        setArrowDirection(9, 'left');
+      }
+    });
+  </script>
 </body>
 </html>
