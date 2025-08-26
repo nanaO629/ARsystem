@@ -1,185 +1,297 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>AR Navi</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AR Navi (AUTO: Marker/GPS)</title>
 
-  <!-- A-Frame / AR.js（CDN） -->
-  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.min.js"></script>
+<!-- A-Frame / AR.js（CDN） -->
+<script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.min.js"></script>
 
-  <script>
-    // 画像を「ヨー（Y軸）だけ」カメラへ向ける（ピッチ/ロールは固定）
-    // さらに 180° 足して“正面”を向かせる
-    AFRAME.registerComponent('face-camera-yaw', {
-      init() {
-        this.vCam = new THREE.Vector3();
-        this.vObj = new THREE.Vector3();
-      },
-      tick() {
-        const scene = this.el.sceneEl;
-        if (!scene || !scene.camera) return;
-        const cam = scene.camera;
+<style>
+  .hud{position:fixed;left:12px;right:12px;top:12px;display:flex;gap:8px;z-index:10}
+  .hud button{padding:10px 12px;border:0;border-radius:10px;background:#222;color:#fff;font-weight:700}
+  .badge{position:fixed;right:12px;bottom:12px;background:rgba(0,0,0,.55);color:#fff;padding:8px 10px;border-radius:8px;font:12px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;white-space:pre-line;z-index:10;max-width:calc(100% - 24px)}
+</style>
 
-        cam.getWorldPosition(this.vCam);
-        this.el.object3D.getWorldPosition(this.vObj);
-
-        const dx = this.vCam.x - this.vObj.x;
-        const dz = this.vCam.z - this.vObj.z;
-        const yaw = Math.atan2(dx, dz) + Math.PI; // ← 正面補正
-        this.el.object3D.rotation.set(0, yaw, 0);
-      }
-    });
-  </script>
+<script>
+  // カメラの「ヨー（Y軸）」だけをカメラ方向へ。鏡像にならないよう +π は足さない
+  AFRAME.registerComponent('face-camera-yaw', {
+    init(){ this.vCam=new THREE.Vector3(); this.vObj=new THREE.Vector3(); },
+    tick(){
+      const s=this.el.sceneEl; if(!s||!s.camera) return;
+      s.camera.getWorldPosition(this.vCam);
+      this.el.object3D.getWorldPosition(this.vObj);
+      const dx=this.vCam.x-this.vObj.x, dz=this.vCam.z-this.vObj.z;
+      const yaw=Math.atan2(dx,dz);
+      this.el.object3D.rotation.set(0,yaw,0);
+    }
+  });
+</script>
 </head>
 <body style="margin:0; overflow:hidden;">
 
-  <a-scene id="scene"
-           embedded
-           renderer="alpha: true; antialias: true"
-           vr-mode-ui="enabled: false"
-           device-orientation-permission-ui="enabled: true"
-           arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false">
-    <!-- 階段ピクトをプリロード（stairs.png を同じフォルダに置く） -->
-    <a-assets timeout="20000" id="assets">
-      <img id="stairsImgAsset" src="stairs.png" crossorigin="anonymous">
-    </a-assets>
+<div class="hud">
+  <button id="btnStart">開始</button>
+  <button id="btnToggle">手動切替</button>
+</div>
+<div class="badge" id="badge">準備中…</div>
 
-    <a-entity camera id="cam"></a-entity>
-  </a-scene>
+<a-scene id="scene"
+         embedded
+         renderer="alpha: true; antialias: true"
+         vr-mode-ui="enabled: false"
+         device-orientation-permission-ui="enabled: true"
+         arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false">
+  <!-- 階段ピクト -->
+  <a-assets timeout="20000" id="assets">
+    <img id="stairsImgAsset" src="stairs.png" crossorigin="anonymous">
+  </a-assets>
 
-  <script>
-    // 向き→ヨー角（矢印は X=-90°で寝かせ、Yだけ回す）
-    const yawMap = {'直進':0,'下':0,'うしろ':180,'右':-90,'左':90,'右斜め':-45,'左斜め':45};
-    const normalize = d => d==='ひだり' ? '左' : d;
+  <a-entity camera id="cam"></a-entity>
 
-    // ルート定義（講義室3〜11・学務課）
-    const plan = {
-      '3':  {1:'右', 2:'うしろ',3:'うしろ', 4:'左',5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
-      '4':  {1:'右', 2:'右', 3:'下', 4:'直進', 5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
-      '5':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'直進', 6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
-      '6':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'ひだり', 8:'左斜め', 9:'左',10:'左',11:'左'},
-      '7':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'右',   7:'直進',   8:'左斜め', 9:'左',10:'左',11:'左'},
-      '8':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'うしろ', 8:'左斜め', 9:'左',10:'左',11:'左'},
-      '9':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'階段', 7:'右',     8:'下',     9:'階段', 10:'左',11:'左'},
+  <!-- ===== GPSレイヤ（画面前方に矢印） ===== -->
+  <a-entity id="gpsLayer" visible="false">
+    <a-entity id="gpsArrow" position="0 0 -2">
+      <a-entity id="gpsArrowYaw" rotation="-90 0 0">
+        <a-cone position="0 0.6 0" radius-bottom="0.4" radius-top="0" height="1.2" color="green"></a-cone>
+        <a-cylinder position="0 0 0" radius="0.12" height="1.2" color="green"></a-cylinder>
+      </a-entity>
+    </a-entity>
+  </a-entity>
 
-      '10': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
-             12:'左',13:'左', 14:'左', 15:'下', 16:'右',17:'右'},
-      '11': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
-             12:'左',13:'左',14:'左',15:'左',16:'左', 17:'下'},
+  <!-- ===== マーカーレイヤ（従来の仕組み） ===== -->
+  <a-entity id="markerLayer" visible="true"></a-entity>
+</a-scene>
 
-      // room=gakumu
-      'gakumu': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
-                 12:'下',13:'下', 14:'右',15:'右',16:'右',17:'右'}
-    };
+<script>
+/*** ========= 室内（マーカー）用の設定 ========= ***/
+const yawMap = {'直進':0,'下':0,'うしろ':180,'右':-90,'左':90,'右斜め':-45,'左斜め':45};
+const normalize = d => d==='ひだり' ? '左' : d;
 
-    const room = new URLSearchParams(location.search).get('room') || '3';
-    const scene = document.querySelector('#scene');
+// あなたの既存ルート（3〜11・学務課）
+const plan = {
+  '3':  {1:'右', 2:'うしろ',3:'うしろ', 4:'左',5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+  '4':  {1:'右', 2:'右', 3:'下', 4:'直進', 5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+  '5':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'直進', 6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+  '6':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'ひだり', 8:'左斜め', 9:'左',10:'左',11:'左'},
+  '7':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'右',   7:'直進',   8:'左斜め', 9:'左',10:'左',11:'左'},
+  '8':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'うしろ', 8:'左斜め', 9:'左',10:'左',11:'左'},
+  '9':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'階段', 7:'右',     8:'下',     9:'階段', 10:'左',11:'左'},
+  '10': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
+         12:'左',13:'左',14:'左',15:'下',16:'右',17:'右'},
+  '11': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
+         12:'左',13:'左',14:'左',15:'左',16:'左', 17:'下'},
+  'gakumu': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
+             12:'下',13:'下', 14:'右',15:'右',16:'右',17:'右'}
+};
 
-    // アセットロード完了フラグ
-    let stairsReady = false;
-    document.getElementById('assets').addEventListener('loaded', () => { stairsReady = true; });
+function buildMarkers(room){
+  const scene = document.querySelector('#scene');
+  const layer = document.getElementById('markerLayer');
+  layer.innerHTML = ''; // 作り直し
 
-    // シーン準備完了後にノード生成
-    scene.addEventListener('loaded', () => {
-      for (let i = 1; i <= 28; i++) {
-        const marker = document.createElement('a-marker');
-        marker.setAttribute('type','barcode');
-        marker.setAttribute('value', String(i));
-        marker.setAttribute('id', `marker-${i}`);
+  for(let i=1;i<=28;i++){
+    const marker = document.createElement('a-marker');
+    marker.setAttribute('type','barcode');
+    marker.setAttribute('value', String(i));
+    marker.setAttribute('id', `marker-${i}`);
 
-        // 先輩方式の矢印（cone+cylinder）
-        const wrap = document.createElement('a-entity');
-        wrap.setAttribute('id', `arrowWrap${i}`);
-        wrap.setAttribute('visible','true');
+    const wrap = document.createElement('a-entity');
+    wrap.setAttribute('id', `arrowWrap${i}`);
+    wrap.setAttribute('visible','true');
 
-        const yawNode = document.createElement('a-entity');
-        yawNode.setAttribute('id', `arrowYaw${i}`);
-        yawNode.setAttribute('rotation','-90 0 0'); // X=-90で寝かせ固定（前=-Z）
+    const yawNode = document.createElement('a-entity');
+    yawNode.setAttribute('id', `arrowYaw${i}`);
+    yawNode.setAttribute('rotation','-90 0 0'); // 寝かせ固定
 
-        const cone = document.createElement('a-cone');
-        cone.setAttribute('position','0 0.6 0');
-        cone.setAttribute('radius-bottom','0.4');
-        cone.setAttribute('radius-top','0');
-        cone.setAttribute('height','1.2');
-        cone.setAttribute('color','green');
+    const cone = document.createElement('a-cone');
+    cone.setAttribute('position','0 0.6 0');
+    cone.setAttribute('radius-bottom','0.4');
+    cone.setAttribute('radius-top','0');
+    cone.setAttribute('height','1.2');
+    cone.setAttribute('color','green');
 
-        const cyl = document.createElement('a-cylinder');
-        cyl.setAttribute('position','0 0 0');
-        cyl.setAttribute('radius','0.12');
-        cyl.setAttribute('height','1.2');
-        cyl.setAttribute('color','green');
+    const cyl = document.createElement('a-cylinder');
+    cyl.setAttribute('position','0 0 0');
+    cyl.setAttribute('radius','0.12');
+    cyl.setAttribute('height','1.2');
+    cyl.setAttribute('color','green');
 
-        yawNode.appendChild(cone);
-        yawNode.appendChild(cyl);
-        wrap.appendChild(yawNode);
+    yawNode.appendChild(cone); yawNode.appendChild(cyl);
+    wrap.appendChild(yawNode);
 
-        // 階段グループ（画像＋文字）
-        const stairsGroup = document.createElement('a-entity');
-        stairsGroup.setAttribute('id', `stairsGroup${i}`);
-        stairsGroup.setAttribute('visible', 'false');
-        stairsGroup.setAttribute('face-camera-yaw', '');       // ← ヨーだけカメラへ
-        stairsGroup.setAttribute('position', '0 1.2 0.35');    // 少し上・手前(+Z)
-        stairsGroup.setAttribute('scale', '-2.2 2.2 2.2');     // 水平反転＋少し大きく
+    // 階段（画像＋文字）
+    const stairsGroup = document.createElement('a-entity');
+    stairsGroup.setAttribute('id', `stairsGroup${i}`);
+    stairsGroup.setAttribute('visible', 'false');
+    stairsGroup.setAttribute('face-camera-yaw', '');
+    stairsGroup.setAttribute('position', '0 1.2 0.35');
+    stairsGroup.setAttribute('scale', '2.2 2.2 2.2');
 
-        const stairsImg = document.createElement('a-plane');
-        stairsImg.setAttribute('id', `stairsImg${i}`);
-        stairsImg.setAttribute('width', '0.7');
-        stairsImg.setAttribute('height', '0.7');
-        // フラット＋透明PNG＋両面
-        stairsImg.setAttribute('material', 'shader: flat; src: #stairsImgAsset; transparent: true; side: double; alphaTest: 0.01;');
-        stairsImg.setAttribute('visible','false');
+    const stairsImg = document.createElement('a-plane');
+    stairsImg.setAttribute('id', `stairsImg${i}`);
+    stairsImg.setAttribute('width', '0.7');
+    stairsImg.setAttribute('height', '0.7');
+    stairsImg.setAttribute('material','shader: flat; src: #stairsImgAsset; transparent: true; side: double; alphaTest: 0.01;');
+    stairsImg.setAttribute('visible','false');
 
-        // 画像が使えない場合のフォールバック文字
-        const stairsText = document.createElement('a-entity');
-        stairsText.setAttribute('id', `stairsText${i}`);
-        stairsText.setAttribute('position', '0 0 0.001');
+    const stairsText = document.createElement('a-entity');
+    stairsText.setAttribute('id', `stairsText${i}`);
+    stairsText.setAttribute('position','0 0 0.001');
+    stairsText.setAttribute('visible','false');
+    stairsText.setAttribute('text',{value:'階段へ',align:'center',color:'red',width:3.0,baseline:'center',wrapCount:6});
+
+    stairsGroup.appendChild(stairsImg);
+    stairsGroup.appendChild(stairsText);
+
+    marker.appendChild(wrap);
+    marker.appendChild(stairsGroup);
+    layer.appendChild(marker);
+
+    const apply = ()=>{
+      const dirRaw = (plan[room]||{})[i];
+      if(!dirRaw) return;
+      const dir = normalize(dirRaw);
+      if(dir==='階段'){
+        wrap.setAttribute('visible','false');
+        stairsGroup.setAttribute('visible','true');
+        stairsImg.setAttribute('visible','true'); // 画像優先
         stairsText.setAttribute('visible','false');
-        stairsText.setAttribute('text', {
-          value: '階段へ',
-          align: 'center',
-          color: 'red',
-          width: 3.0,
-          baseline: 'center',
-          wrapCount: 6
-        });
-
-        stairsGroup.appendChild(stairsImg);
-        stairsGroup.appendChild(stairsText);
-
-        marker.appendChild(wrap);
-        marker.appendChild(stairsGroup);
-        scene.appendChild(marker);
-
-        // 方向/表示の適用
-        const apply = () => {
-          const dirRaw = (plan[room] || {})[i];
-          if (!dirRaw) return;
-          const dir = normalize(dirRaw);
-
-          if (dir === '階段') {
-            wrap.setAttribute('visible','false');
-            stairsGroup.setAttribute('visible','true');
-            if (stairsReady) {
-              stairsImg.setAttribute('visible','true');
-              stairsText.setAttribute('visible','false');
-            } else {
-              stairsImg.setAttribute('visible','false');
-              stairsText.setAttribute('visible','true');
-            }
-          } else {
-            stairsGroup.setAttribute('visible','false');
-            wrap.setAttribute('visible','true');
-            const yaw = yawMap[dir] ?? 0;
-            yawNode.setAttribute('rotation', `-90 ${yaw} 0`);
-          }
-        };
-
-        apply();                           // 初回適用
-        marker.addEventListener('markerFound', apply); // 検出時にも再適用
+      }else{
+        stairsGroup.setAttribute('visible','false');
+        wrap.setAttribute('visible','true');
+        const yaw = yawMap[dir] ?? 0;
+        yawNode.setAttribute('rotation', `-90 ${yaw} 0`);
       }
+    };
+    apply();
+    marker.addEventListener('markerFound', ()=>{
+      markerFoundOnce = true;
+      if(currentMode!=='marker'){ setMode('marker','マーカー検出'); }
     });
-  </script>
+  }
+}
+
+/*** ========= 屋外（GPS/コンパス）用 ========= ***/
+const toRad=d=>d*Math.PI/180, toDeg=r=>r*180/Math.PI;
+function bearing(lat1,lon1,lat2,lon2){
+  const φ1=toRad(lat1), φ2=toRad(lat2), Δλ=toRad(lon2-lon1);
+  const y=Math.sin(Δλ)*Math.cos(φ2);
+  const x=Math.cos(φ1)*Math.sin(φ2)-Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+  return (toDeg(Math.atan2(y,x))+360)%360;
+}
+function headingFromEvent(e){
+  if(e.webkitCompassHeading!=null) return e.webkitCompassHeading;  // iOS
+  if(e.alpha!=null) return (360 - e.alpha + 360)%360;              // Android
+  return null;
+}
+
+const gpsYaw = document.getElementById('gpsArrowYaw');
+let lastPos=null, lastHeading=null, watchId=null;
+
+/*** ========= 自動判定＆UI ========= ***/
+const params = new URLSearchParams(location.search);
+const room = params.get('room');               // 屋内用
+const dest = {                                 // 屋外用（URLで渡す）
+  lat: params.get('lat') ? parseFloat(params.get('lat')) : null,
+  lng: params.get('lng') ? parseFloat(params.get('lng')) : null
+};
+const badge = document.getElementById('badge');
+const gpsLayer = document.getElementById('gpsLayer');
+const markerLayer = document.getElementById('markerLayer');
+const scene = document.getElementById('scene');
+
+let currentMode = 'auto';
+let markerFoundOnce = false;
+let gpsReady = false;
+
+function setBadge(text){ badge.textContent = text; }
+function setMode(mode, reason=''){
+  currentMode = mode;
+  if(mode==='marker'){
+    markerLayer.setAttribute('visible','true');
+    gpsLayer.setAttribute('visible','false');
+    setBadge(`モード: マーカー ${reason?'\n'+reason:''}`);
+  }else if(mode==='gps'){
+    markerLayer.setAttribute('visible','false');
+    gpsLayer.setAttribute('visible','true');
+    setBadge(`モード: GPS/コンパス ${reason?'\n'+reason:''}`);
+  }
+}
+
+function updateGpsArrow(){
+  if(!lastPos || lastHeading==null || dest.lat==null || dest.lng==null) return;
+  const brg = bearing(lastPos.lat,lastPos.lng,dest.lat,dest.lng);
+  const yaw = (brg - lastHeading + 360) % 360;
+  gpsYaw.setAttribute('rotation', `-90 ${yaw} 0`);
+  if(currentMode==='gps'){
+    setBadge(`モード: GPS/コンパス\n目的地方位:${brg.toFixed(0)}°  端末:${lastHeading.toFixed(0)}°  回転:${yaw.toFixed(0)}°\nGPS:${lastPos.lat.toFixed(6)},${lastPos.lng.toFixed(6)}`);
+  }
+}
+
+document.getElementById('btnStart').onclick = async ()=>{
+  // iOSの方位センサー許可（ユーザ操作必須）
+  try{
+    if(window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission){
+      const res = await DeviceOrientationEvent.requestPermission();
+      if(res!=='granted') throw new Error('方位センサーの許可が必要です');
+    }
+  }catch(e){ /* 無視（Android等） */ }
+
+  // 方位
+  window.addEventListener('deviceorientation', e=>{
+    const h = headingFromEvent(e);
+    if(h==null) return;
+    lastHeading = h;
+    updateGpsArrow();
+  }, true);
+
+  // 位置
+  if(navigator.geolocation){
+    if(watchId) navigator.geolocation.clearWatch(watchId);
+    watchId = navigator.geolocation.watchPosition(
+      pos=>{
+        const {latitude,longitude,accuracy} = pos.coords;
+        lastPos = {lat:latitude,lng:longitude};
+        gpsReady = accuracy && accuracy <= 30; // 閾値は調整可
+        updateGpsArrow();
+      },
+      err=>setBadge('GPSエラー: '+err.message),
+      {enableHighAccuracy:true, maximumAge:5000, timeout:15000}
+    );
+  }
+
+  // マーカー群を生成
+  if(room){ buildMarkers(room); }
+
+  // 自動判定（3.5秒待ち）
+  setBadge('自動判定中… カメラをマーカーに向けるか、屋外にいればGPS待ち');
+  setTimeout(()=>{
+    if(markerFoundOnce){
+      setMode('marker','（自動）');
+    }else if(gpsReady && dest.lat!=null && dest.lng!=null){
+      setMode('gps','（自動）');
+    }else{
+      // どうにも決められない → とりあえずマーカー優先
+      setMode('marker','（暫定／手動切替可）');
+    }
+  }, 3500);
+};
+
+// 手動切替
+document.getElementById('btnToggle').onclick = ()=>{
+  if(currentMode==='marker' && dest.lat!=null){
+    setMode('gps','（手動）');
+  }else{
+    setMode('marker','（手動）');
+  }
+};
+
+// シーン準備表示
+scene.addEventListener('loaded', ()=> setBadge('「開始」を押してセンサー/GPSを許可してください。\n屋内→マーカー／屋外→GPSを自動判定します。'));
+
+</script>
 </body>
 </html>
