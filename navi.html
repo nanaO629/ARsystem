@@ -10,7 +10,7 @@
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.min.js"></script>
 
   <script>
-    // カメラのヨー（Y軸）のみ追従（鏡像にならないよう +PI は足さない）
+    // カメラのヨー（Y軸）のみ追従（鏡像にならないよう +PI は足さない）u
     AFRAME.registerComponent('face-camera-yaw', {
       init(){ this.vCam=new THREE.Vector3(); this.vObj=new THREE.Vector3(); },
       tick(){
@@ -57,7 +57,7 @@
 
   <script>
     /* ==== 矢印の向きテーブル ==== */
-    const yawMap = {'直進':0,'下':0,'うしろ':180,'右':-90,'左':90,'右斜め':-45,'左斜め':45};
+    const yawMap = {'直進':0,'下':0,'うしろ':-180,'右':-90,'左':90,'右斜め':-45,'左斜め':45};
     const normalize = d => d==='ひだり' ? '左' : d;
 
     /* ==== 回転オフセット（ここを変えるだけでGLBの前向き補正） ==== */
