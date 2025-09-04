@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>AR Navi (GLB矢印＋GLB階段・自動サイズ調整)</title>
+  <title>AR Navi (GLB矢印＋GLB階段 / オフセット対応)</title>
 
   <!-- A-Frame / AR.js（CDN） -->
   <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.min.js"></script>
 
   <script>
-    // カメラの「ヨー（Y軸）」だけ合わせる（鏡像にならないよう +PI は足さない）
+    // カメラのヨー（Y軸）のみ追従（鏡像にならないよう +PI は足さない）
     AFRAME.registerComponent('face-camera-yaw', {
       init(){ this.vCam=new THREE.Vector3(); this.vObj=new THREE.Vector3(); },
       tick(){
@@ -23,18 +23,16 @@
       }
     });
 
-    // モデルの“高さ”を指定値にフィットさせる（GLBの実寸がバラバラでも一定に）
-    // 例: fit-model-height="height: 0.6" なら全高を 0.6m に合わせる
+    // GLBの実寸高さを指定値に自動フィット
     AFRAME.registerComponent('fit-model-height', {
-      schema: { height: {type: 'number', default: 0.6} },
+      schema:{ height:{type:'number', default:0.6} },
       init(){
-        this.el.addEventListener('model-loaded', (e)=>{
-          const obj = e.detail.model;
-          const box = new THREE.Box3().setFromObject(obj);
-          const size = new THREE.Vector3(); box.getSize(size);
-          const h = size.y || 1;
-          const s = this.data.height / h;
-          this.el.object3D.scale.set(s, s, s);
+        this.el.addEventListener('model-loaded', e=>{
+          const obj=e.detail.model;
+          const box=new THREE.Box3().setFromObject(obj);
+          const size=new THREE.Vector3(); box.getSize(size);
+          const h=size.y||1; const s=this.data.height/h;
+          this.el.object3D.scale.set(s,s,s);
         });
       }
     });
@@ -48,7 +46,6 @@
            vr-mode-ui="enabled: false"
            device-orientation-permission-ui="enabled: true"
            arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false">
-    <!-- アセット（矢印GLB / 階段GLB） -->
     <a-assets timeout="20000" id="assets">
       <a-asset-item id="arrowModel"  src="arrow.glb"></a-asset-item>
       <a-asset-item id="stairsModel" src="stairs.glb"></a-asset-item>
@@ -59,10 +56,14 @@
   </a-scene>
 
   <script>
-    /* ======= 向きテーブル／ルート（これまで通り） ======= */
+    /* ==== 矢印の向きテーブル ==== */
     const yawMap = {'直進':0,'下':0,'うしろ':180,'右':-90,'左':90,'右斜め':-45,'左斜め':45};
     const normalize = d => d==='ひだり' ? '左' : d;
 
+    /* ==== 回転オフセット（ここを変えるだけでGLBの前向き補正） ==== */
+    const ARROW_YAW_OFFSET = -90;   // 例: 0 / -90 / 90 / 180 から試す
+
+    /* ==== ルート定義 ==== */
     const plan = {
       '3':  {1:'右', 2:'うしろ',3:'うしろ', 4:'左',5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
       '4':  {1:'右', 2:'右', 3:'下', 4:'直進', 5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
@@ -79,15 +80,15 @@
                  12:'下',13:'下', 14:'右',15:'右',16:'右',17:'右'}
     };
 
-    /* ======= 見栄えの基準（必要なら微調整） ======= */
-    // 矢印GLB：高さを 0.8m に規格化、モデルの基準回転は 0 0 0 から開始（ズレたらここを変える）
+    /* ==== 見栄えの基準 ==== */
+    // 矢印：高さを0.45mに規格化（大き過ぎ対策）
     const ARROW_BASE_ROT = '0 0 0';
-    const ARROW_TARGET_H = 0.6;   // ←矢印の全高（メートル）
+    const ARROW_TARGET_H = 0.45;
 
-    // 階段GLB：高さを 0.6m に規格化。正面向きはモデル側の前方が -Z になるように調整
+    // 階段：高さ0.6mに規格化、看板のように少し上＆手前に
     const STAIRS_BASE_ROT = '0 0 0';
-    const STAIRS_TARGET_H = 0.6;  // ←階段看板の全高（メートル）
-    const STAIRS_GROUP_POS = '0 1.2 0.35'; // マーカー面より少し上＆手前(+Z)
+    const STAIRS_TARGET_H = 0.6;
+    const STAIRS_GROUP_POS = '0 1.2 0.35';
 
     const room = new URLSearchParams(location.search).get('room') || '3';
 
@@ -101,18 +102,17 @@
         marker.setAttribute('value', String(i));
         marker.setAttribute('id', `marker-${i}`);
 
-        /* ===== 矢印（arrow.glb） ===== */
+        /* === 矢印（arrow.glb） === */
         const arrowWrap = document.createElement('a-entity');
         arrowWrap.setAttribute('id', `arrowWrap${i}`);
         arrowWrap.setAttribute('visible','true');
 
-        const arrowYaw = document.createElement('a-entity'); // ←ここを回す
+        const arrowYaw = document.createElement('a-entity'); // ←ここだけ回す
         arrowYaw.setAttribute('id', `arrowYaw${i}`);
         arrowYaw.setAttribute('rotation','0 0 0');
 
         const arrowModelNode = document.createElement('a-entity');
         arrowModelNode.setAttribute('rotation', ARROW_BASE_ROT);
-        // 高さを 0.8m に自動フィット
         arrowModelNode.setAttribute('fit-model-height', `height: ${ARROW_TARGET_H}`);
 
         const arrowModel = document.createElement('a-entity');
@@ -122,7 +122,7 @@
         arrowYaw.appendChild(arrowModelNode);
         arrowWrap.appendChild(arrowYaw);
 
-        /* ===== 階段（stairs.glb） ===== */
+        /* === 階段（stairs.glb） === */
         const stairsGroup = document.createElement('a-entity');
         stairsGroup.setAttribute('id', `stairsGroup${i}`);
         stairsGroup.setAttribute('visible','false');
@@ -131,7 +131,6 @@
 
         const stairsModelNode = document.createElement('a-entity');
         stairsModelNode.setAttribute('rotation', STAIRS_BASE_ROT);
-        // 高さを 0.6m に自動フィット
         stairsModelNode.setAttribute('fit-model-height', `height: ${STAIRS_TARGET_H}`);
 
         const stairsModel = document.createElement('a-entity');
@@ -145,7 +144,7 @@
         marker.appendChild(stairsGroup);
         layer.appendChild(marker);
 
-        /* ===== 指示の適用 ===== */
+        /* === 指示の適用 === */
         const apply = () => {
           const dirRaw = (plan[room] || {})[i];
           if (!dirRaw) return;
@@ -157,7 +156,10 @@
           } else {
             stairsGroup.setAttribute('visible','false');
             arrowWrap.setAttribute('visible','true');
-            const yaw = yawMap[dir] ?? 0;
+
+            // yaw = 指示角 + オフセット（0..359に正規化）
+            const yawBase = yawMap[dir] ?? 0;
+            const yaw = ((yawBase + ARROW_YAW_OFFSET) % 360 + 360) % 360;
             arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
           }
         };
