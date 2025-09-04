@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>AR Navi (GLB矢印＋GLB階段 / オフセット対応)</title>
+  <title>AR Navi (矢印GLB＋階段UP/DOWN GLB)</title>
 
   <!-- A-Frame / AR.js（CDN） -->
   <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.min.js"></script>
 
   <script>
-    // カメラのヨー（Y軸）のみ追従（鏡像にならないよう +PI は足さない）u
+    /* カメラのヨー（Y軸）のみ追従（鏡像にならないよう +PI は足さない） */
     AFRAME.registerComponent('face-camera-yaw', {
       init(){ this.vCam=new THREE.Vector3(); this.vObj=new THREE.Vector3(); },
       tick(){
@@ -23,7 +23,7 @@
       }
     });
 
-    // GLBの実寸高さを指定値に自動フィット
+    /* GLBの実寸高さを指定値に自動フィット（全高を合わせる） */
     AFRAME.registerComponent('fit-model-height', {
       schema:{ height:{type:'number', default:0.6} },
       init(){
@@ -46,9 +46,12 @@
            vr-mode-ui="enabled: false"
            device-orientation-permission-ui="enabled: true"
            arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false">
+    <!-- アセット（矢印GLB / 階段UP・DOWN GLB） -->
     <a-assets timeout="20000" id="assets">
       <a-asset-item id="arrowModel"  src="arrow.glb"></a-asset-item>
-      <a-asset-item id="stairsModel" src="stairs.glb"></a-asset-item>
+      <!-- スペースは %20 で記述 -->
+      <a-asset-item id="stairsUpModel"   src="up%20stairs.glb"></a-asset-item>
+      <a-asset-item id="stairsDownModel" src="down%20stairs.glb"></a-asset-item>
     </a-assets>
 
     <a-entity camera id="cam"></a-entity>
@@ -57,38 +60,38 @@
 
   <script>
     /* ==== 矢印の向きテーブル ==== */
-    const yawMap = {'直進':0,'下':0,'うしろ':0,'右':-90,'左':90,'右斜め':-45,'左斜め':45};
+    const yawMap = {'直進':0,'下':0,'うしろ':180,'右':-90,'左':90,'右斜め':-45,'左斜め':45};
     const normalize = d => d==='ひだり' ? '左' : d;
 
-    /* ==== 回転オフセット（ここを変えるだけでGLBの前向き補正） ==== */
-    const ARROW_YAW_OFFSET = 90;   
+    /* ==== 回転オフセット（GLBの前向き補正） ==== */
+    const ARROW_YAW_OFFSET = -90;   // 0 / -90 / 90 / 180 から合う値に
 
-    /* ==== ルート定義 ==== */
+    /* ==== ルート定義（階段は '階段上' / '階段下' を指定可能） ==== 
+       既存の '階段' はデフォルトで '階段上' に置き換えています。必要に応じて '階段下' に変更してください。 */
     const plan = {
-      '3':  {1:'右', 2:'うしろ',3:'うしろ', 4:'左',5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
+      '3':  {1:'右', 2:'うしろ',3:'うしろ', 4:'左',5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左',12:'階段下',13:'左',14:'右',15:''},
       '4':  {1:'右', 2:'右', 3:'下', 4:'直進', 5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
       '5':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'直進', 6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
       '6':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'ひだり', 8:'左斜め', 9:'左',10:'左',11:'左'},
       '7':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'右',   7:'直進',   8:'左斜め', 9:'左',10:'左',11:'左'},
       '8':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'うしろ', 8:'左斜め', 9:'左',10:'左',11:'左'},
-      '9':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'階段', 7:'右',     8:'下',     9:'階段', 10:'左',11:'左'},
-      '10': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
+      // ↓ 階段を '階段上' にしています。降りルートにしたい箇所は '階段下' に変えてOK
+      '9':  {1:'右', 2:'右', 3:'下', 4:'右', 5:'右', 6:'階段上', 7:'右', 8:'下', 9:'階段上', 10:'左',11:'左'},
+      '10': {1:'右',2:'右',3:'右',4:'右', 5:'階段上',6:'階段上', 7:'右',8:'右', 9:'階段上', 10:'左',11:'左',
              12:'左',13:'左', 14:'左', 15:'下', 16:'右',17:'右'},
-      '11': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
+      '11': {1:'右',2:'右',3:'右',4:'右', 5:'階段上',6:'階段上', 7:'右',8:'右', 9:'階段上', 10:'左',11:'左',
              12:'左',13:'左',14:'左',15:'左',16:'左', 17:'下'},
-      'gakumu': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
+      'gakumu': {1:'右',2:'右',3:'右',4:'右', 5:'階段上',6:'階段上', 7:'右',8:'右', 9:'階段上', 10:'左',11:'左',
                  12:'下',13:'下', 14:'右',15:'右',16:'右',17:'右'}
     };
 
-    /* ==== 見栄えの基準 ==== */
-    // 矢印：高さを0.45mに規格化（大き過ぎ対策）
+    /* ==== 見栄えの基準（自動フィットの目標高さ） ==== */
     const ARROW_BASE_ROT = '0 0 0';
-    const ARROW_TARGET_H = 0.45;
+    const ARROW_TARGET_H = 0.45;     // 矢印の全高
 
-    // 階段：高さ0.6mに規格化、看板のように少し上＆手前に
     const STAIRS_BASE_ROT = '0 0 0';
-    const STAIRS_TARGET_H = 0.6;
-    const STAIRS_GROUP_POS = '0 1.2 0.35';
+    const STAIRS_TARGET_H = 0.6;     // 階段看板の全高
+    const STAIRS_GROUP_POS = '0 1.2 0.35'; // マーカー面より少し上＆前
 
     const room = new URLSearchParams(location.search).get('room') || '3';
 
@@ -122,22 +125,35 @@
         arrowYaw.appendChild(arrowModelNode);
         arrowWrap.appendChild(arrowYaw);
 
-        /* === 階段（stairs.glb） === */
+        /* === 階段（UP/DOWN 2種のGLBを切替） === */
         const stairsGroup = document.createElement('a-entity');
         stairsGroup.setAttribute('id', `stairsGroup${i}`);
         stairsGroup.setAttribute('visible','false');
         stairsGroup.setAttribute('face-camera-yaw','');
         stairsGroup.setAttribute('position', STAIRS_GROUP_POS);
 
-        const stairsModelNode = document.createElement('a-entity');
-        stairsModelNode.setAttribute('rotation', STAIRS_BASE_ROT);
-        stairsModelNode.setAttribute('fit-model-height', `height: ${STAIRS_TARGET_H}`);
+        // UP
+        const stairsUpNode = document.createElement('a-entity');
+        stairsUpNode.setAttribute('rotation', STAIRS_BASE_ROT);
+        stairsUpNode.setAttribute('fit-model-height', `height: ${STAIRS_TARGET_H}`);
+        const stairsUp = document.createElement('a-entity');
+        stairsUp.setAttribute('gltf-model', '#stairsUpModel');
+        stairsUpNode.appendChild(stairsUp);
 
-        const stairsModel = document.createElement('a-entity');
-        stairsModel.setAttribute('gltf-model', '#stairsModel');
+        // DOWN
+        const stairsDownNode = document.createElement('a-entity');
+        stairsDownNode.setAttribute('rotation', STAIRS_BASE_ROT);
+        stairsDownNode.setAttribute('fit-model-height', `height: ${STAIRS_TARGET_H}`);
+        const stairsDown = document.createElement('a-entity');
+        stairsDown.setAttribute('gltf-model', '#stairsDownModel');
+        stairsDownNode.appendChild(stairsDown);
 
-        stairsModelNode.appendChild(stairsModel);
-        stairsGroup.appendChild(stairsModelNode);
+        // まずは両方作り、表示は後で切替
+        stairsUpNode.setAttribute('visible','false');
+        stairsDownNode.setAttribute('visible','false');
+
+        stairsGroup.appendChild(stairsUpNode);
+        stairsGroup.appendChild(stairsDownNode);
 
         // ツリーに追加
         marker.appendChild(arrowWrap);
@@ -150,14 +166,21 @@
           if (!dirRaw) return;
           const dir = normalize(dirRaw);
 
-          if (dir === '階段') {
+          // 階段系：'階段', '階段上', '階段下' を判定
+          if (dir === '階段' || dir === '階段上' || dir === '階段下') {
             arrowWrap.setAttribute('visible','false');
             stairsGroup.setAttribute('visible','true');
+            // デフォルト：'階段' は '階段上' と同扱い
+            const isUp = (dir === '階段' || dir === '階段上');
+            stairsUpNode.setAttribute('visible',  isUp);
+            stairsDownNode.setAttribute('visible', !isUp);
           } else {
+            // 矢印
             stairsGroup.setAttribute('visible','false');
+            stairsUpNode.setAttribute('visible',  false);
+            stairsDownNode.setAttribute('visible', false);
             arrowWrap.setAttribute('visible','true');
 
-            // yaw = 指示角 + オフセット（0..359に正規化）
             const yawBase = yawMap[dir] ?? 0;
             const yaw = ((yawBase + ARROW_YAW_OFFSET) % 360 + 360) % 360;
             arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
