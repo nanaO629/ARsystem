@@ -3,23 +3,23 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>AR Navi</title>
+  <title>AR Navi (GLB矢印版)</title>
 
   <!-- A-Frame / AR.js（CDN） -->
   <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.min.js"></script>
 
   <script>
-    // カメラの「ヨー（Y軸）」だけ合わせる。鏡像防止のため 180°は足さない。
+    // 階段ピクトを“正面”に見せる：カメラのヨー（Y軸）だけ合わせる
     AFRAME.registerComponent('face-camera-yaw', {
-      init() { this.vCam = new THREE.Vector3(); this.vObj = new THREE.Vector3(); },
-      tick() {
-        const s = this.el.sceneEl; if (!s || !s.camera) return;
+      init(){ this.vCam=new THREE.Vector3(); this.vObj=new THREE.Vector3(); },
+      tick(){
+        const s=this.el.sceneEl; if(!s||!s.camera) return;
         s.camera.getWorldPosition(this.vCam);
         this.el.object3D.getWorldPosition(this.vObj);
-        const dx = this.vCam.x - this.vObj.x, dz = this.vCam.z - this.vObj.z;
-        const yaw = Math.atan2(dx, dz);          // ← ここに +Math.PI は入れない
-        this.el.object3D.rotation.set(0, yaw, 0); // ピッチ／ロール固定
+        const dx=this.vCam.x-this.vObj.x, dz=this.vCam.z-this.vObj.z;
+        const yaw=Math.atan2(dx,dz); // +Math.PI は入れない（鏡像防止）
+        this.el.object3D.rotation.set(0,yaw,0);
       }
     });
   </script>
@@ -32,20 +32,24 @@
            vr-mode-ui="enabled: false"
            device-orientation-permission-ui="enabled: true"
            arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false">
-    <!-- 階段ピクト（stairs.png）をプリロード -->
+    <!-- アセット（GLB矢印 / 階段画像） -->
     <a-assets timeout="20000" id="assets">
+      <a-asset-item id="arrowModel" src="arrow.glb"></a-asset-item>
       <img id="stairsImgAsset" src="stairs.png" crossorigin="anonymous">
     </a-assets>
 
     <a-entity camera id="cam"></a-entity>
+
+    <!-- マーカー用の入れ物（ここに全部動的生成） -->
+    <a-entity id="markerLayer" visible="true"></a-entity>
   </a-scene>
 
   <script>
-    // 矢印の向き → ヨー角（X=-90°で寝かせ、Yだけ回す）
+    /* ======= 矢印の向きテーブル（従来どおり） ======= */
     const yawMap = {'直進':0,'下':0,'うしろ':180,'右':-90,'左':90,'右斜め':-45,'左斜め':45};
     const normalize = d => d==='ひだり' ? '左' : d;
 
-    // ルート定義（講義室3〜11・学務課）
+    /* ======= 目的地ごとの指示（そのまま） ======= */
     const plan = {
       '3':  {1:'右', 2:'うしろ',3:'うしろ', 4:'左',5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
       '4':  {1:'右', 2:'右', 3:'下', 4:'直進', 5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左'},
@@ -54,97 +58,82 @@
       '7':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'右',   7:'直進',   8:'左斜め', 9:'左',10:'左',11:'左'},
       '8':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'うしろ', 8:'左斜め', 9:'左',10:'左',11:'左'},
       '9':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'階段', 7:'右',     8:'下',     9:'階段', 10:'左',11:'左'},
-
       '10': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
              12:'左',13:'左', 14:'左', 15:'下', 16:'右',17:'右'},
       '11': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
              12:'左',13:'左',14:'左',15:'左',16:'左', 17:'下'},
-
-      // room=gakumu
       'gakumu': {1:'右',2:'右',3:'右',4:'右', 5:'階段',6:'階段', 7:'右',8:'右', 9:'階段', 10:'左',11:'左',
                  12:'下',13:'下', 14:'右',15:'右',16:'右',17:'右'}
     };
 
+    /* ======= GLBモデルの基準回転/スケール =======
+       - モデルの“前方”が A-Frame の -Z を向くように合わせます。
+       - もし向きが合わない場合は MODEL_BASE_ROT を調整してください。
+         例: '0 180 0' / '-90 0 0' / '0 0 0' など。 */
+    const MODEL_BASE_ROT = '-90 0 0';   // ←まずはこれで。ズレたらここを変える
+    const MODEL_SCALE    = '0.7 0.7 0.7';
+
     const room = new URLSearchParams(location.search).get('room') || '3';
-    const scene = document.querySelector('#scene');
 
-    // アセットロード完了フラグ
-    let stairsReady = false;
-    document.getElementById('assets').addEventListener('loaded', () => { stairsReady = true; });
-
-    // シーン準備後にノード生成
+    const scene = document.getElementById('scene');
     scene.addEventListener('loaded', () => {
+      const layer = document.getElementById('markerLayer');
       for (let i = 1; i <= 28; i++) {
-        // マーカー
         const marker = document.createElement('a-marker');
         marker.setAttribute('type','barcode');
         marker.setAttribute('value', String(i));
         marker.setAttribute('id', `marker-${i}`);
 
-        // 先輩方式の矢印（cone + cylinder）
+        // ===== 矢印（GLB） =====
         const wrap = document.createElement('a-entity');
         wrap.setAttribute('id', `arrowWrap${i}`);
         wrap.setAttribute('visible','true');
 
+        // ヨー回転ノード（ここだけ回す）
         const yawNode = document.createElement('a-entity');
         yawNode.setAttribute('id', `arrowYaw${i}`);
-        yawNode.setAttribute('rotation','-90 0 0'); // X=-90で寝かせ固定（前=-Z）
+        yawNode.setAttribute('rotation','0 0 0');
 
-        const cone = document.createElement('a-cone');
-        cone.setAttribute('position','0 0.6 0');
-        cone.setAttribute('radius-bottom','0.4');
-        cone.setAttribute('radius-top','0');
-        cone.setAttribute('height','1.2');
-        cone.setAttribute('color','green');
+        // モデル本体（基準回転＆スケール）
+        const model = document.createElement('a-entity');
+        model.setAttribute('gltf-model', '#arrowModel');
+        model.setAttribute('rotation', MODEL_BASE_ROT);
+        model.setAttribute('scale', MODEL_SCALE);
+        model.setAttribute('position', '0 0 0');  // 必要なら 0 0.5 0 などに調整
 
-        const cyl = document.createElement('a-cylinder');
-        cyl.setAttribute('position','0 0 0');
-        cyl.setAttribute('radius','0.12');
-        cyl.setAttribute('height','1.2');
-        cyl.setAttribute('color','green');
-
-        yawNode.appendChild(cone);
-        yawNode.appendChild(cyl);
+        yawNode.appendChild(model);
         wrap.appendChild(yawNode);
 
-        // 階段グループ（画像＋文字）— Yawのみ追従、反転なし
+        // ===== 階段グループ（画像＋文字のフォールバック） =====
         const stairsGroup = document.createElement('a-entity');
         stairsGroup.setAttribute('id', `stairsGroup${i}`);
-        stairsGroup.setAttribute('visible', 'false');
-        stairsGroup.setAttribute('face-camera-yaw', '');
-        stairsGroup.setAttribute('position', '0 1.2 0.35');   // 少し上・手前(+Z)
-        stairsGroup.setAttribute('scale', '2.2 2.2 2.2');     // 正のスケール（反転なし）
+        stairsGroup.setAttribute('visible','false');
+        stairsGroup.setAttribute('face-camera-yaw','');
+        stairsGroup.setAttribute('position','0 1.2 0.35'); // 少し上＆手前
+        stairsGroup.setAttribute('scale','2.2 2.2 2.2');
 
         const stairsImg = document.createElement('a-plane');
         stairsImg.setAttribute('id', `stairsImg${i}`);
-        stairsImg.setAttribute('width', '0.7');
-        stairsImg.setAttribute('height', '0.7');
-        stairsImg.setAttribute('material', 'shader: flat; src: #stairsImgAsset; transparent: true; side: double; alphaTest: 0.01;');
-        stairsImg.setAttribute('visible','false');
+        stairsImg.setAttribute('width','0.7');
+        stairsImg.setAttribute('height','0.7');
+        stairsImg.setAttribute('material','shader: flat; src: #stairsImgAsset; transparent: true; side: double; alphaTest: 0.01;');
+        stairsImg.setAttribute('visible','true');
 
-        // 画像のフォールバック文字
         const stairsText = document.createElement('a-entity');
         stairsText.setAttribute('id', `stairsText${i}`);
-        stairsText.setAttribute('position', '0 0 0.001');
+        stairsText.setAttribute('position','0 0 0.001');
         stairsText.setAttribute('visible','false');
-        stairsText.setAttribute('text', {
-          value: '階段へ',
-          align: 'center',
-          color: 'red',
-          width: 3.0,
-          baseline: 'center',
-          wrapCount: 6
-        });
+        stairsText.setAttribute('text',{value:'階段へ',align:'center',color:'red',width:3.0,baseline:'center',wrapCount:6});
 
         stairsGroup.appendChild(stairsImg);
         stairsGroup.appendChild(stairsText);
 
-        // ツリーに追加
+        // ツリーへ
         marker.appendChild(wrap);
         marker.appendChild(stairsGroup);
-        scene.appendChild(marker);
+        layer.appendChild(marker);
 
-        // 表示・向き適用
+        // ===== 指示を反映 =====
         const apply = () => {
           const dirRaw = (plan[room] || {})[i];
           if (!dirRaw) return;
@@ -153,23 +142,17 @@
           if (dir === '階段') {
             wrap.setAttribute('visible','false');
             stairsGroup.setAttribute('visible','true');
-            if (stairsReady) {
-              stairsImg.setAttribute('visible','true');
-              stairsText.setAttribute('visible','false');
-            } else {
-              stairsImg.setAttribute('visible','false');
-              stairsText.setAttribute('visible','true');
-            }
           } else {
             stairsGroup.setAttribute('visible','false');
             wrap.setAttribute('visible','true');
             const yaw = yawMap[dir] ?? 0;
-            yawNode.setAttribute('rotation', `-90 ${yaw} 0`);
+            // GLBは“前を -Z とみなす”。モデルの基準回転は MODEL_BASE_ROT で調整済み。
+            yawNode.setAttribute('rotation', `0 ${yaw} 0`);
           }
         };
 
-        apply();                           // 初回適用
-        marker.addEventListener('markerFound', apply); // 検出時にも再適用
+        apply();
+        marker.addEventListener('markerFound', apply);
       }
     });
   </script>
