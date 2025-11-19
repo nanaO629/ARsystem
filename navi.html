@@ -4,7 +4,21 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AR Navi</title>
-  <style>body{margin:0; overflow:hidden;}</style>
+  <style>
+    body{margin:0; overflow:hidden;}
+    /* ▼ 追加：ミニ地図オーバーレイ */
+    #btnMap { position:fixed; left:10px; bottom:10px; z-index:9999;
+              padding:8px 12px; border-radius:10px; border:1px solid #aaa;
+              background:#fff; font-size:14px; }
+    #miniMapImg { position:fixed; left:10px; bottom:60px; z-index:9998;
+                  width:300px; max-width:70vw; display:none;
+                  background:#ffffffcc; backdrop-filter: blur(4px);
+                  border:1px solid #aaa; border-radius:12px; padding:8px; }
+    #miniMapImg img { display:block; width:100%; height:auto; border-radius:8px; }
+    #miniMapImg .hud { margin-top:6px; font-size:12px; color:#333; display:flex; gap:8px; align-items:center; }
+    #miniMapImg .pill { padding:2px 6px; border-radius:999px; background:#f3f3f3; border:1px solid #ddd; }
+    #miniMapImg .right { margin-left:auto; display:flex; gap:8px; align-items:center; }
+  </style>
   <script src="aframe.min.js"></script>
   <script src="aframe-ar.js"></script>
 </head>
@@ -16,19 +30,30 @@
     renderer="colorManagement: true;"
     arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false"
   >
-
-    <!-- 3Dアセットを先読み -->
+    <!-- 3Dアセット先読み -->
     <a-assets timeout="15000">
-      <a-asset-item id="arrowModel"   src="arrow.glb"></a-asset-item>
+      <a-asset-item id="arrowModel"      src="arrow.glb"></a-asset-item>
       <a-asset-item id="upStairsModel"   src="up stairs.glb"></a-asset-item>
       <a-asset-item id="downStairsModel" src="down stairs.glb"></a-asset-item>
-      <!-- ★ 追加：到着GLB -->
-      <a-asset-item id="arrivalModel" src="arrival.glb"></a-asset-item>
+      <a-asset-item id="arrivalModel"    src="arrival.glb"></a-asset-item>
     </a-assets>
 
-    <!-- カメラ -->
     <a-entity camera></a-entity>
   </a-scene>
+
+  <!-- ▼ 追加：ミニ地図オーバーレイUI -->
+  <button id="btnMap">🗺️ 地図</button>
+  <div id="miniMapImg" aria-live="polite">
+    <img id="mapPreview" alt="現在地つき簡易地図">
+    <div class="hud">
+      <span class="pill">現在地 ● 付き地図</span>
+      <div class="right">
+        <label class="pill" style="display:flex;gap:6px;align-items:center;cursor:pointer;">
+          <input type="checkbox" id="pinMap"> 常に表示
+        </label>
+      </div>
+    </div>
+  </div>
 
   <script>
     /********************
@@ -36,15 +61,15 @@
      ********************/
     const ARROW_TARGET_H   = 0.45; // 矢印の見かけ高さ(m)
     const STAIRS_TARGET_H  = 0.60; // 階段の見かけ高さ(m)
-    const ARRIVAL_TARGET_H = 0.60; // 到着表示の見かけ高さ(m) ← 追加
-    const ARROW_YAW_OFFSET = -90;  // 矢印GLBの前向き補正（モデルに合わせて調整）
-    const STAIRS_GROUP_POS = { x:0, y:0.8, z:0 }; // 階段看板の位置
-    const ARRIVAL_GROUP_POS= { x:0, y:0.8, z:0 }; // 到着看板の位置 ← 追加
+    const ARRIVAL_TARGET_H = 0.60; // 到着表示の見かけ高さ(m)
+    const ARROW_YAW_OFFSET = -90;  // 矢印GLBの前向き補正
+    const STAIRS_GROUP_POS = { x:0, y:0.8, z:0 };
+    const ARRIVAL_GROUP_POS= { x:0, y:0.8, z:0 };
 
     /********************
      * 自作コンポーネント
      ********************/
-    // GLBの全高を指定値に合わせる（モデルのバウンディングから自動スケール）
+    // GLBの全高を指定値に合わせる
     AFRAME.registerComponent('fit-model-height', {
       schema: { target: { type: 'number', default: 0.6 } },
       init() {
@@ -61,7 +86,7 @@
       }
     });
 
-    // 看板のようにY軸だけカメラへ正対させる（上下の傾きは追従しない）
+    // 看板のようにY軸だけカメラへ正対
     AFRAME.registerComponent('face-camera-yaw', {
       tick() {
         const cam = this.el.sceneEl && this.el.sceneEl.camera;
@@ -76,7 +101,7 @@
     });
 
     /********************
-     * 向きマップ（矢印系）
+     * 向きマップ（矢印）
      ********************/
     const yawMap = {
       '直進': 0, 'うしろ': 180, '下': 180,
@@ -93,7 +118,7 @@
      * 指示：『右/左/直進/うしろ/右斜め/左斜め/階段上/階段下/到着』
      ********************/
     const plan = {
- '3':  {1:'右', 2:'到着',3:'到着', 4:'左',5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左',12:'階段下',13:'左',14:'右',15:'階段下',16:'右',17:'右',18:'右'},
+      '3':  {1:'右', 2:'到着',3:'到着', 4:'左',5:'左',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左',12:'階段下',13:'左',14:'右',15:'階段下',16:'右',17:'右',18:'右'},
       '4':  {1:'右', 2:'右', 3:'下', 4:'到着', 5:'到着',6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左',12:'階段下',13:'左',14:'右',15:'階段下',16:'右',17:'右',18:'右'},
       '5':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'到着', 6:'左',7:'左', 8:'左斜め', 9:'左',10:'左',11:'左',12:'階段下',13:'左',14:'右',15:'階段下',16:'右',17:'右',18:'右'},
       '6':  {1:'右', 2:'右', 3:'下', 4:'右',   5:'右',   6:'直進', 7:'ひだり', 8:'左斜め', 9:'左',10:'左',11:'左',12:'階段下',13:'左',14:'右',15:'階段下',16:'右',17:'右',18:'右'},
@@ -114,11 +139,10 @@
     const room = new URLSearchParams(location.search).get('room') || '3';
 
     /********************
-     * マーカーの生成（1..28）
+     * マーカー生成（1..28）
      ********************/
     const scene = document.querySelector('a-scene');
     scene.addEventListener('loaded', () => {
-      // 28個のマーカーをまとめて作る
       for (let v = 1; v <= 28; v++) {
         const marker = document.createElement('a-marker');
         marker.setAttribute('type', 'barcode');
@@ -126,8 +150,6 @@
         marker.setAttribute('id', `m${v}`);
 
         // --- 矢印ノード ---
-        // arrowWrap … 位置/上下の調整
-        //  └ arrowYaw … Y回転だけ当てる（GLBはこの子に付ける）
         const arrowWrap = document.createElement('a-entity');
         arrowWrap.setAttribute('id', `arrowWrap-${v}`);
         const arrowYaw = document.createElement('a-entity');
@@ -138,17 +160,15 @@
         arrowYaw.appendChild(arrow);
         arrowWrap.appendChild(arrowYaw);
 
-        // --- 階段ノード（UP/DOWNをまとめる） ---
+        // --- 階段ノード ---
         const stairsGroup = document.createElement('a-entity');
         stairsGroup.setAttribute('id', `stairsGroup-${v}`);
         stairsGroup.setAttribute('position', `${STAIRS_GROUP_POS.x} ${STAIRS_GROUP_POS.y} ${STAIRS_GROUP_POS.z}`);
-        // UP
         const stairsUp = document.createElement('a-entity');
         stairsUp.setAttribute('id', `stairsUp-${v}`);
         stairsUp.setAttribute('gltf-model', '#upStairsModel');
         stairsUp.setAttribute('fit-model-height', `target: ${STAIRS_TARGET_H}`);
         stairsUp.setAttribute('face-camera-yaw', '');
-        // DOWN
         const stairsDown = document.createElement('a-entity');
         stairsDown.setAttribute('id', `stairsDown-${v}`);
         stairsDown.setAttribute('gltf-model', '#downStairsModel');
@@ -157,7 +177,7 @@
         stairsGroup.appendChild(stairsUp);
         stairsGroup.appendChild(stairsDown);
 
-        // --- ★ 到着ノード（看板表示） ---
+        // --- 到着ノード ---
         const arrivalGroup = document.createElement('a-entity');
         arrivalGroup.setAttribute('id', `arrivalGroup-${v}`);
         arrivalGroup.setAttribute('position', `${ARRIVAL_GROUP_POS.x} ${ARRIVAL_GROUP_POS.y} ${ARRIVAL_GROUP_POS.z}`);
@@ -168,32 +188,28 @@
         arrival.setAttribute('fit-model-height', `target: ${ARRIVAL_TARGET_H}`);
         arrivalGroup.appendChild(arrival);
 
-        // マーカーに全部ぶら下げる
         marker.appendChild(arrowWrap);
         marker.appendChild(stairsGroup);
         marker.appendChild(arrivalGroup);
         scene.appendChild(marker);
 
-        // 検出/見失いイベントで反映
-        marker.addEventListener('markerFound', () => apply(v));
-        marker.addEventListener('markerLost',  () => { /* 必要なら非表示など */ });
+        // 検出イベント
+        marker.addEventListener('markerFound', () => {
+          apply(v);
+          // ▼ 追加：該当マーカーの地図画像を表示
+          showMapFor(v);
+        });
       }
-
-      // 初期反映（開いた直後に一度）
+      // 初期反映
       apply();
+      attachMapHandlers(); // 念のため（後述の関数で安全にアタッチ）
     });
 
     /********************
      * 表示適用
-     * plan[room][value] に応じて
-     *  - 矢印の向き
-     *  - 階段（UP/DOWN）
-     *  - ★ 到着表示
-     * を切り替える
      ********************/
     function apply(foundValue) {
       const table = plan[room] || {};
-      // 1..28 すべて（foundValueがあればそこだけでもOK）
       const loopFrom = (foundValue ? foundValue : 1);
       const loopTo   = (foundValue ? foundValue : 28);
 
@@ -207,33 +223,30 @@
         const stairsDown  = document.getElementById(`stairsDown-${v}`);
         const arrivalGroup= document.getElementById(`arrivalGroup-${v}`);
 
-        // デフォルトは全部非表示 → 指示に応じて必要なものだけ表示
+        // いったん全部非表示
         if (arrowWrap)    arrowWrap.setAttribute('visible', false);
         if (stairsGroup)  stairsGroup.setAttribute('visible', false);
         if (stairsUp)     stairsUp.setAttribute('visible', false);
         if (stairsDown)   stairsDown.setAttribute('visible', false);
         if (arrivalGroup) arrivalGroup.setAttribute('visible', false);
 
-        if (!dir) continue; // 指示なしは何も出さない
+        if (!dir) continue;
 
-        // 1) 階段（上/下）
+        // 階段（上/下）
         if (dir === '階段' || dir === '階段上' || dir === '階段下') {
           stairsGroup.setAttribute('visible', true);
-          if (dir === '階段下') {
-            stairsDown.setAttribute('visible', true);
-          } else {
-            stairsUp.setAttribute('visible', true); // '階段' は上り扱い
-          }
+          if (dir === '階段下') stairsDown.setAttribute('visible', true);
+          else stairsUp.setAttribute('visible', true); // '階段' は上り扱い
           continue;
         }
 
-        // 2) ★ 到着
+        // 到着
         if (dir === '到着') {
           arrivalGroup.setAttribute('visible', true);
           continue;
         }
 
-        // 3) 矢印（右/左/直進/うしろ/斜め…）
+        // 矢印（向き）
         const baseYaw = yawMap[dir];
         if (typeof baseYaw === 'number') {
           const yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
@@ -242,6 +255,103 @@
         }
       }
     }
+
+    /************************************************************
+     * ▼▼ ここから追加：マーカーごとの「地図＋現在地画像」を表示 ▼▼
+     ************************************************************/
+    // 1) 画像対応表（例）
+    // - 画像は「地図＋現在地（●）」が描かれた静止画を用意
+    // - デフォルトは value(1..28) 対応
+    // - room 別に差し替えたい場合は overrides に追記（?room=10 など）
+    const MAP_IMAGES = {
+      default: {
+        1:'map1.png',
+        2:'maps/default/value_2.png',
+        3:'maps/default/value_3.png',
+        4:'maps/default/value_4.png',
+        5:'maps/default/value_5.png',
+        6:'maps/default/value_6.png',
+        7:'maps/default/value_7.png',
+        8:'maps/default/value_8.png',
+        9:'maps/default/value_9.png',
+        10:'maps/default/value_10.png',
+        11:'maps/default/value_11.png',
+        12:'maps/default/value_12.png',
+        13:'maps/default/value_13.png',
+        14:'maps/default/value_14.png',
+        15:'maps/default/value_15.png',
+        16:'maps/default/value_16.png',
+        17:'maps/default/value_17.png',
+        18:'maps/default/value_18.png',
+        19:'maps/default/value_19.png',
+        20:'maps/default/value_20.png',
+        21:'maps/default/value_21.png',
+        22:'maps/default/value_22.png',
+        23:'maps/default/value_23.png',
+        24:'maps/default/value_24.png',
+        25:'maps/default/value_25.png',
+        26:'maps/default/value_26.png',
+        27:'maps/default/value_27.png',
+        28:'maps/default/value_28.png'
+      },
+      overrides: {
+        // 例：room=10 で value=6,7 を専用差し替え
+        '10': {
+          6:'maps/room10/value_6.png',
+          7:'maps/room10/value_7.png'
+        },
+        // '11': { 12:'maps/room11/value_12.png' },
+        // 'gakumu': { 5:'maps/gakumu/value_5.png' }
+      }
+    };
+
+    // 2) トグルUI制御
+    const btnMap   = document.getElementById('btnMap');
+    const boxMap   = document.getElementById('miniMapImg');
+    const imgMap   = document.getElementById('mapPreview');
+    const pinMapEl = document.getElementById('pinMap');
+    let mapVisible = false;
+    btnMap.addEventListener('click', () => {
+      mapVisible = !mapVisible;
+      boxMap.style.display = mapVisible ? 'block' : 'none';
+    });
+
+    // 3) 画像決定ロジック
+    function pickMapImage(value){
+      const roomParam = (new URLSearchParams(location.search).get('room') || '').toString();
+      const over = (MAP_IMAGES.overrides && MAP_IMAGES.overrides[roomParam]) || null;
+      if (over && over[value]) return over[value];
+      return MAP_IMAGES.default[value] || null;
+    }
+
+    // 4) 検出時の自動表示（ピン留めOFFなら4秒で自動クローズ）
+    let autoHideTimer = null;
+    function showMapFor(value){
+      const src = pickMapImage(value);
+      if (!src) return;
+      imgMap.src = src;
+      boxMap.style.display = 'block';
+      mapVisible = true;
+      if (!pinMapEl.checked) {
+        if (autoHideTimer) clearTimeout(autoHideTimer);
+        autoHideTimer = setTimeout(() => {
+          boxMap.style.display = 'none';
+          mapVisible = false;
+        }, 4000);
+      }
+    }
+
+    // 5) 念のためのアタッチ（scene生成後にも呼ぶ）
+    function attachMapHandlers(){
+      for (let v=1; v<=28; v++){
+        const m = document.getElementById('m'+v);
+        if (!m) continue;
+        // すでに addEventListener しているが、二重登録されても問題ない処理にしてある
+        m.addEventListener('markerFound', () => showMapFor(v));
+      }
+    }
+    if (document.readyState === 'complete') attachMapHandlers();
+    else window.addEventListener('load', attachMapHandlers);
   </script>
 </body>
 </html>
