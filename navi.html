@@ -6,15 +6,24 @@
   <title>AR Navi</title>
   <style>
     body{margin:0; overflow:hidden;}
-    /* ★ 追加：目的地までの残り情報HUD */
-    #hudRemain {
-      position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
-      z-index: 9999; background: #111c; color: #fff; padding: 8px 12px;
-      border: 1px solid #333; border-radius: 999px; font-size: 14px;
+    /* ▼ 右下メッセージHUD */
+    #hudMsg {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      z-index: 9999;
+      background: #111c;
+      color: #fff;
+      padding: 10px 12px;
+      border: 1px solid #333;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+      max-width: min(60vw, 320px);
       backdrop-filter: blur(6px);
+      display: none; /* 初期は非表示 */
+      word-break: break-word;
     }
-    #hudRemain .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#43a047; margin-right:6px; }
-    #hudRemain.hidden { display:none; }
   </style>
   <script src="aframe.min.js"></script>
   <script src="aframe-ar.js"></script>
@@ -39,10 +48,8 @@
     <a-entity camera></a-entity>
   </a-scene>
 
-  <!-- ★ 追加：目的地までの残り情報HUD（画面下センター） -->
-  <div id="hudRemain" class="hidden" aria-live="polite">
-    <span class="dot"></span><span id="hudText">目的地まで残り…</span>
-  </div>
+  <!-- ▼ 右下メッセージHUD -->
+  <div id="hudMsg" aria-live="polite"></div>
 
   <script>
     /********************
@@ -80,7 +87,6 @@
       tick() {
         const cam = this.el.sceneEl && this.el.sceneEl.camera;
         if (!cam) return;
-        const wp = new THREE.Box3();
         const pos = new THREE.Vector3();
         this.el.object3D.getWorldPosition(pos);
         const dx = cam.position.x - pos.x;
@@ -184,10 +190,10 @@
         marker.appendChild(arrivalGroup);
         scene.appendChild(marker);
 
-        // 検出イベント：表示適用＋残りHUD更新（★ここがポイント）
+        // 検出イベント：表示適用＋メッセージ更新
         marker.addEventListener('markerFound', () => {
           apply(v);
-          updateRemainHUD(room, v); // ← 追加
+          updateMsgHUD(room, v);  // ← 右下メッセージを更新
         });
       }
       // 初期反映
@@ -232,9 +238,9 @@
         // 到着
         if (dir === '到着') {
           arrivalGroup.setAttribute('visible', true);
-          // お好み：到着時はHUDを隠す
-          const hud = document.getElementById('hudRemain');
-          if (hud) hud.classList.add('hidden');
+          // 到着時は右下メッセージを自動で隠す（不要なら消してOK）
+          const hudMsg = document.getElementById('hudMsg');
+          if (hudMsg) hudMsg.style.display = 'none';
           continue;
         }
 
@@ -249,74 +255,42 @@
     }
 
     /******************************************************
-     * ★ 追加：目的地までの「残り」HUD
+     * 右下メッセージ（自分のテキストだけ表示）
+     * room → value → { msg: "表示したい文章" }
      ******************************************************/
-    // 任意のカスタムヒント（距離・時間・メッセージ）—必要な箇所だけ埋めればOK
-    const REM_HINT = {
-      // 例：room=10 の value=14 で「残り30m／60秒」
-      // '10': {
-      //   14: { meters: 30, secs: 60 },
-      //   15: { msg: 'もうすぐ到着！' }
-      // },
+    const MSG_HINT = {
+      default: {
+        // 例) 全room共通で value=1 の時に表示
+        // 1: { msg: "受付まで直進 → 右折" }
+      },
+      '10': {
+        14: { msg: "目的地まで約3区間。直進して右手の階段へ。" },
+        15: { msg: "もうすぐ到着！案内板の先を右へ。" },
+        16: { msg: "最後の曲がり角です。右に進んでください。" }
+      },
+      '11': {
+        12: { msg: "この先、左に曲がって直進。案内表示に従ってください。" }
+      }
+      // 'gakumu': { 15: { msg: "学務課はこの先右手です" } }
     };
 
-    // planを使って「いまのvalueから到着まで何ステップか」を自動計算
-    function remainingMarkersUntilArrival(room, currentValue) {
-      const table = (window.plan && window.plan[room]) || {};
-      const keys = Object.keys(table).map(Number).sort((a,b)=>a-b);
-      const idx = keys.indexOf(Number(currentValue));
-      if (idx < 0) return null;
+    const hudMsg = document.getElementById('hudMsg');
 
-      let arrivalIndex = -1;
-      for (let i = idx + 1; i < keys.length; i++) {
-        if (table[keys[i]] === '到着') { arrivalIndex = i; break; }
-      }
-      if (arrivalIndex === -1) return null;
-
-      let count = 0;
-      for (let i = idx + 1; i <= arrivalIndex; i++) {
-        const dir = table[keys[i]];
-        if (dir) count++;
-      }
-      return count;
+    function pickMsg(room, value){
+      if (MSG_HINT[room] && MSG_HINT[room][value]) return MSG_HINT[room][value].msg;
+      if (MSG_HINT.default && MSG_HINT.default[value]) return MSG_HINT.default[value].msg;
+      return null;
     }
 
-    const hudBox  = document.getElementById('hudRemain');
-    const hudText = document.getElementById('hudText');
-
-    function updateRemainHUD(room, value) {
-      const byRoom = REM_HINT[room] || {};
-      const hint = byRoom[value];
-      let text = '';
-
-      if (hint && hint.msg) {
-        text = hint.msg;
-      } else if (hint && (hint.meters != null || hint.secs != null)) {
-        const parts = [];
-        if (hint.meters != null) parts.push(`あと${hint.meters}m`);
-        if (hint.secs   != null) parts.push(`約${hint.secs}秒`);
-        text = parts.join('／');
-      } else {
-        const remain = remainingMarkersUntilArrival(room, value);
-        if (remain == null) {
-          text = 'もうすぐ到着';
-        } else if (remain <= 1) {
-          text = '次で到着';
-        } else {
-          text = `到着まであと ${remain} マーカー`;
-        }
+    function updateMsgHUD(room, value){
+      const text = pickMsg(room, value);
+      if (!text) {
+        hudMsg.style.display = 'none';
+        hudMsg.textContent = '';
+        return;
       }
-
-      hudText.textContent = text;
-      hudBox.classList.remove('hidden');
-
-      // お好み：到着直前は軽くバイブ
-      try {
-        const remain = remainingMarkersUntilArrival(room, value);
-        if (remain !== null && remain <= 1 && 'vibrate' in navigator) {
-          navigator.vibrate([80, 40, 80]);
-        }
-      } catch(e){}
+      hudMsg.textContent = text;
+      hudMsg.style.display = 'block';
     }
   </script>
 </body>
