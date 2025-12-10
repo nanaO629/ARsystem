@@ -179,7 +179,7 @@
       ],
       '9': [
         ['1-4','右'],
-        ['5-6','階段上'], [18,'右'], ['12-17','左'], [23,'到着'],
+        ['5-6','階段上'], [18,'右'], ['11-17','左'], [23,'到着'],
         [9,'左'], [7,'直進'], [10,'左斜め'], [8,'右'], ['20-22','左'], ['25-27','左']
       ],
       '10': [
@@ -320,24 +320,26 @@
       }
     }
 
- // まずは数字だけのテーブル
-const distRaw = {
-  3: { 1: 0, 4: 10, 5: 18 },
-  4: { 1: 5, 5: 8 },
-  5: { 1: 12 },
-};
-
-// そこから {msg:"あとXm"} の形に変換
-const distMsg = {};
-for (const from in distRaw) {
-  distMsg[from] = {};
-  for (const to in distRaw[from]) {
-    const d = distRaw[from][to];
-    distMsg[from][to] = {
-      msg: d === 0 ? "到着しました" : `あと${d}m`,
+  const distRaw = {
+      '3':  { 1: 18, 4: 10, 5: 0 },   // 例）3からスタート: 1は18m, 4は10m, 5は到着(0m)
+      '4':  { 1: 13, 5: 0 },          // ここは適当に例なので好きに書き換えてOK
+      '5':  { 1: 20 },
+      // ... 必要な分だけ増やしていく
     };
-  }
-}
+
+    // ② distRaw から {msg:"あと◯m"} を自動生成する
+    const distMsg = {};
+    for (const roomKey in distRaw) {
+      distMsg[roomKey] = {};
+      const table = distRaw[roomKey];
+      for (const valueKey in table) {
+        const d = table[valueKey];
+        distMsg[roomKey][valueKey] = {
+          msg: d === 0 ? "到着しました" : `あと${d}m`
+        };
+      }
+    }
+
 
 
 
