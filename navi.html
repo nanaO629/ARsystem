@@ -122,9 +122,7 @@
       left45: -45
     };
 
-    /********************
-     * 範囲展開ヘルパー + ビルダー
-     ********************/
+
     function expandKeys(keys) {
       if (Array.isArray(keys)) return keys.flatMap(k => expandKeys(k));
       if (typeof keys === 'number') return [keys];
@@ -150,9 +148,7 @@
       return out;
     }
 
-    /********************
-     * 経路テーブル（あなたの入力を修正反映）
-     ********************/
+    
     const plan = buildPlan({
       '3': [
         [1,'右'], [2,'到着'], [3,'到着'],
@@ -325,18 +321,24 @@
     /********************
      * メッセージ（任意）
      ********************/
-    const MSG_HINT = {
-      default: { },
-      '3':  { 1:{msg:"あと m"}, 4:{msg:"あと10m"}, },
-      '4':  { 5:{msg:"左に進むと次のマーカーで到着"} },
-      '5':  { 6:{msg:"左に進むと次のマーカーで到着"} },
-      '6':  { 9:{msg:"左に進むと次のマーカーで到着"} },
-      '7':  { 8:{msg:"左に進むと次のマーカーで到着"} },
-      '8':  { 6:{msg:"右に進むと次のマーカーで到着"}, 8:{msg:"反対側が目的地です"} },
-      '9':  { 16:{msg:"もうすぐ目的地です"} },
-      '10': { 14:{msg:"左に進むと次のマーカーで到着"}, 12:{msg:"左に進むと2個先のマーカーで到着"}, 16:{msg:"右に進むと次のマーカーで到着"} },
-      '11': { 17:{msg:"反対側が目的地です"} }
+const distRaw = {
+  3: { 1: 0, 4: 10, 5: 18 },
+  4: { 1: 5, 5: 8 },
+  5: { 1: 12 },
+};
+
+// そこから {msg:"あとXm"} の形に変換
+const distMsg = {};
+for (const from in distRaw) {
+  distMsg[from] = {};
+  for (const to in distRaw[from]) {
+    const d = distRaw[from][to];
+    distMsg[from][to] = {
+      msg: d === 0 ? "到着しました" : `あと${d}m`,
     };
+  }
+}
+
 
     const hudMsg = document.getElementById('hudMsg');
 
