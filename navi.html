@@ -150,7 +150,6 @@
       return out;
     }
 
-    
     const plan = buildPlan({
       '3': [
         [1,'右'], [2,'到着'], [3,'到着'],
@@ -302,7 +301,7 @@
           continue;
         }
 
-        // 到着
+        // 到着（GLBだけ出してHUDは消す）
         if (dir === '到着') {
           arrivalGroup.setAttribute('visible', true);
           const hud = document.getElementById('hudMsg');
@@ -320,29 +319,44 @@
       }
     }
 
-  const distRaw = {
-      '3':  { 1: 18, 4: 10, 5: 0 },   // 例）3からスタート: 1は18m, 4は10m, 5は到着(0m)
-      '4':  { 1: 13, 5: 0 },          // ここは適当に例なので好きに書き換えてOK
+    /********************
+     * 距離メッセージ
+     ********************/
+    // 残り距離[m]だけを持つテーブル
+    const distRaw = {
+      '3':  { 1: 18, 4: 10, 5: 0 },   // 3からスタート: 1で18m, 4で10m, 5で到着(0m)
+      '4':  { 1: 13, 5: 0 },
       '5':  { 1: 20 },
       // ... 必要な分だけ増やしていく
     };
 
-    // ② distRaw から {msg:"あと◯m"} を自動生成する
-    const distMsg = {};
-    for (const roomKey in distRaw) {
-      distMsg[roomKey] = {};
-      const table = distRaw[roomKey];
-      for (const valueKey in table) {
-        const d = table[valueKey];
-        distMsg[roomKey][valueKey] = {
-          msg: d === 0 ? "到着しました" : `あと${d}m`
-        };
-      }
+    // HUD 要素
+    const hudMsg = document.getElementById('hudMsg');
+
+    // room と marker番号からメッセージ文字列を返す
+    function pickMsg(room, value) {
+      const table = distRaw[room];
+      if (!table) return null;
+
+      const d = table[value];
+      if (d == null) return null;
+
+      if (d === 0) return "到着しました";
+      return `あと${d}m`;
     }
 
+    // HUD 更新
+    function updateMsgHUD(room, value) {
+      const text = pickMsg(room, value);
 
-
-
+      if (!text) {
+        hudMsg.style.display = 'none';
+        hudMsg.textContent = '';
+        return;
+      }
+      hudMsg.textContent = text;
+      hudMsg.style.display = 'block';
+    }
   </script>
 </body>
 </html>
