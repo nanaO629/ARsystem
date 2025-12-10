@@ -122,7 +122,9 @@
       left45: -45
     };
 
-
+    /********************
+     * 範囲展開ヘルパー + ビルダー
+     ********************/
     function expandKeys(keys) {
       if (Array.isArray(keys)) return keys.flatMap(k => expandKeys(k));
       if (typeof keys === 'number') return [keys];
@@ -318,9 +320,7 @@
       }
     }
 
-    /********************
-     * メッセージ（任意）
-     ********************/
+ // まずは数字だけのテーブル
 const distRaw = {
   3: { 1: 0, 4: 10, 5: 18 },
   4: { 1: 5, 5: 8 },
@@ -340,24 +340,7 @@ for (const from in distRaw) {
 }
 
 
-    const hudMsg = document.getElementById('hudMsg');
 
-    function pickMsg(room, value){
-      if (MSG_HINT[room] && MSG_HINT[room][value]) return MSG_HINT[room][value].msg;
-      if (MSG_HINT.default && MSG_HINT.default[value]) return MSG_HINT.default[value].msg;
-      return null;
-    }
-
-    function updateMsgHUD(room, value){
-      const text = pickMsg(room, value);
-      if (!text) {
-        hudMsg.style.display = 'none';
-        hudMsg.textContent = '';
-        return;
-      }
-      hudMsg.textContent = text;
-      hudMsg.style.display = 'block';
-    }
   </script>
 </body>
 </html>
