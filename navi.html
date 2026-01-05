@@ -38,9 +38,9 @@
     <!-- 3Dアセットを先読み -->
     <a-assets timeout="15000">
       <a-asset-item id="arrowModel"   src="arrow.glb"></a-asset-item>
-      <!-- 階段は PNG に切り替え（GLBは削除） -->
-      <img id="img-stairs-up"   src="up stairs.png">
-      <img id="img-stairs-down" src="down stairs.png">
+      <!-- 階段は PNG に変更 -->
+      <img id="img-stairs-up"   src="up_stairs.png">
+      <img id="img-stairs-down" src="down_stairs.png">
       <a-asset-item id="arrivalModel" src="arrival.glb"></a-asset-item>
     </a-assets>
 
@@ -68,7 +68,6 @@
     /********************
      * 自作コンポーネント
      ********************/
-    // GLBの全高を指定値に合わせる（モデルのバウンディングから自動スケール）
     AFRAME.registerComponent('fit-model-height', {
       schema: { target: { type: 'number', default: 0.6 } },
       init() {
@@ -85,7 +84,6 @@
       }
     });
 
-    // 看板のようにY軸だけカメラへ正対させる（上下の傾きは追従しない）
     AFRAME.registerComponent('face-camera-yaw', {
       tick() {
         const cam = this.el.sceneEl && this.el.sceneEl.camera;
@@ -99,14 +97,12 @@
       }
     });
 
-    // 画像を常に手前に＆深度競合を避ける
     AFRAME.registerComponent('always-on-top', {
       init(){ this.el.object3D.traverse(o=>{
         if (o.material){ o.material.depthTest = false; o.renderOrder = 9999; }
       });}
     });
 
-    // 距離でスケール（見やすさキープ）
     AFRAME.registerComponent('scale-by-distance', {
       schema: { k:{type:'number',default:0.18}, min:{type:'number',default:0.8}, max:{type:'number',default:2.0} },
       tick(){
@@ -169,7 +165,7 @@
       return out;
     }
 
-    /* === 元の plan 相当（そのまま流用・編集OK） === */
+    /* === plan（必要に応じて編集OK） === */
     const plan = buildPlan({
       '3': [
         [1,'右'], [2,'到着'], [3,'到着'],
@@ -221,8 +217,7 @@
     const room = new URLSearchParams(location.search).get('room') || '3';
 
     /********************
-     * マーカーの生成（1..MAX_MARKER）
-     * ここで階段PNGノードを仕込む
+     * マーカー生成（1..MAX_MARKER）＋PNG階段ノード
      ********************/
     const scene = document.querySelector('a-scene');
     scene.addEventListener('loaded', () => {
@@ -243,7 +238,7 @@
         arrowYaw.appendChild(arrow);
         arrowWrap.appendChild(arrowYaw);
 
-        // --- ★ 階段PNGノード（上り/下りの2枚を束ねる） ---
+        // --- 階段PNG（上り/下り） ---
         const stairsPNG = document.createElement('a-entity');
         stairsPNG.setAttribute('id', `stairsPNG-${v}`);
         stairsPNG.setAttribute('position', `0 ${PNG_Y_POS} 0`);
@@ -280,20 +275,19 @@
         arrival.setAttribute('fit-model-height', `target: ${ARRIVAL_TARGET_H}`);
         arrivalGroup.appendChild(arrival);
 
-        // マーカーにぶら下げる
+        // ぶら下げ
         marker.appendChild(arrowWrap);
         marker.appendChild(stairsPNG);
         marker.appendChild(arrivalGroup);
         scene.appendChild(marker);
 
-        // 検出イベント：表示適用＋メッセージ更新
+        // 検出イベント
         marker.addEventListener('markerFound', () => {
           apply(v);
           updateMsgHUD(room, v);
         });
       }
-      // 初期反映
-      apply();
+      apply(); // 初期反映
     });
 
     /********************
@@ -323,7 +317,7 @@
 
         if (!dir) continue;
 
-        // ★ PNG階段
+        // PNG階段
         if (dir === '階段' || dir === '階段上' || dir === '階段下') {
           if (stairsPNG) stairsPNG.setAttribute('visible', true);
           if (dir === '階段下') {
@@ -334,7 +328,7 @@
           continue;
         }
 
-        // 到着（GLBだけ出してHUDは消す）
+        // 到着
         if (dir === '到着') {
           if (arrivalGroup) arrivalGroup.setAttribute('visible', true);
           const hud = document.getElementById('hudMsg');
@@ -353,7 +347,7 @@
     }
 
     /********************
-     * 距離HUD（元コードを踏襲）
+     * 距離HUD（必要なら編集）
      ********************/
     const distRaw = {
       '3': { 1: 11, 2: 0, 3: 0, 4: 11, 5: 19, 6: 42, 7: 50, 8: 59, 9: 61, 10: 63, 11: 74, 12: 74, 13: 85, 14: 98, 15: 87, 16: 101, 17: 111, 18: 11, 19: 20, 20: 39, 21: 43, 22: 52, 23: 69, 24: 69, 25: 59, 26: 62, 27: 67, 28: 80 },
