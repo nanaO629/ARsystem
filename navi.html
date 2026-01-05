@@ -30,11 +30,12 @@
 </head>
 <body>
   <!-- ===== A-Frame / AR.js シーン ===== -->
-  <a-scene
-    embedded
-    renderer="colorManagement: true;"
-    arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false"
-  >
+<a-scene
+  embedded
+  vr-mode-ui="enabled: false"
+  renderer="colorManagement: true;"
+  arjs="sourceType: webcam; sourceWidth:1280; sourceHeight:720; displayWidth:1280; displayHeight:720; facingMode: environment; debugUIEnabled: false">
+
     <!-- 3Dアセットを先読み -->
     <a-assets timeout="15000">
       <a-asset-item id="arrowModel"   src="arrow.glb"></a-asset-item>
