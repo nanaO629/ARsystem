@@ -35,15 +35,9 @@
     renderer="colorManagement: true;"
     arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false"
   >
-    <!-- アセット先読み -->
+    <!-- 3Dアセットを先読み（矢印だけGLBのまま） -->
     <a-assets timeout="15000">
-      <!-- 矢印はGLBのまま -->
       <a-asset-item id="arrowModel" src="arrow.glb"></a-asset-item>
-
-      <!-- ▼ 階段・到着はPNGに変更（透過PNG推奨） -->
-      <img id="upStairsImg"   src="up_stairs.png" />
-      <img id="downStairsImg" src="down_stairs.png" />
-      <img id="arrivalImg"    src="arrival.png" />
     </a-assets>
 
     <!-- カメラ -->
@@ -62,12 +56,12 @@
     /********************
      * 表示パラメータ
      ********************/
-    const ARROW_TARGET_H   = 0.3; // 矢印の見かけ高さ(m)
-    const STAIRS_TARGET_H  = 1; // 階段PNGの見かけ高さ(m)
-    const ARRIVAL_TARGET_H = 1; // 到着PNGの見かけ高さ(m)
+    const ARROW_TARGET_H   = 0.45; // 矢印の見かけ高さ(m)
+    const STAIRS_TARGET_H  = 1.00; // ★階段テキスト看板の見かけ高さ(m)（大きめ）
+    const ARRIVAL_TARGET_H = 1.00; // ★到着テキスト看板の見かけ高さ(m)（大きめ）
     const ARROW_YAW_OFFSET = -90;  // 矢印GLBの前向き補正（モデルに合わせて調整）
-    const STAIRS_GROUP_POS = { x:0, y:0.0, z:0 }; // 階段看板の位置
-    const ARRIVAL_GROUP_POS= { x:0, y:0.0, z:0 }; // 到着看板の位置
+    const STAIRS_GROUP_POS = { x:0, y:1.0, z:0 }; // 階段看板の位置（少し上）
+    const ARRIVAL_GROUP_POS= { x:0, y:1.0, z:0 }; // 到着看板の位置（少し上）
 
     /********************
      * 自作コンポーネント
@@ -89,38 +83,6 @@
       }
     });
 
-    // PNG(a-image)の縦サイズを target に合わせて、横幅は画像の比率で自動調整
-    AFRAME.registerComponent('fit-image-height', {
-      schema: { target: { type: 'number', default: 0.6 } },
-      init() {
-        const el = this.el;
-
-        const applySize = () => {
-          const src = el.getAttribute('src'); // "#upStairsImg" など
-          if (!src || typeof src !== 'string' || !src.startsWith('#')) return;
-
-          const img = document.querySelector(src);
-          if (!img) return;
-
-          const set = () => {
-            const w = img.naturalWidth || 1;
-            const h = img.naturalHeight || 1;
-            const aspect = w / h;
-
-            const targetH = this.data.target;
-            el.setAttribute('height', targetH);
-            el.setAttribute('width',  targetH * aspect);
-          };
-
-          if (img.complete) set();
-          else img.addEventListener('load', set, { once: true });
-        };
-
-        // srcセット後に反映されることがあるので1回遅延
-        setTimeout(applySize, 0);
-      }
-    });
-
     // 看板のようにY軸だけカメラへ正対させる（上下の傾きは追従しない）
     AFRAME.registerComponent('face-camera-yaw', {
       tick() {
@@ -134,6 +96,44 @@
         this.el.setAttribute('rotation', `0 ${yaw} 0`);
       }
     });
+
+    /********************
+     * 文字看板（背景板 + テキスト）を作る
+     ********************/
+    function makeTextSign(id, text, heightM) {
+      const group = document.createElement('a-entity');
+      group.setAttribute('id', id);
+      group.setAttribute('face-camera-yaw', '');
+
+      // 背景板
+      const bg = document.createElement('a-plane');
+      const planeH = heightM;
+      const planeW = heightM * 2.2;  // 横は少し広め
+      bg.setAttribute('height', planeH);
+      bg.setAttribute('width',  planeW);
+      bg.setAttribute('color', '#000');
+      bg.setAttribute('opacity', '0.82');
+      bg.setAttribute('material', 'shader: flat; side: double; transparent: true;');
+      bg.setAttribute('position', '0 0 0');
+
+      // テキスト（a-textより確実に動くよう text コンポーネントで）
+      const t = document.createElement('a-entity');
+      t.setAttribute('position', '0 0 0.01');
+      t.setAttribute(
+        'text',
+        `value: ${text};
+         align: center;
+         color: #fff;
+         width: ${planeW * 0.95};
+         wrapCount: 14;
+         baseline: center;
+         shader: msdf;`
+      );
+
+      group.appendChild(bg);
+      group.appendChild(t);
+      return group;
+    }
 
     /********************
      * 方向の正規化 + 矢印角度
@@ -257,41 +257,24 @@
         arrowYaw.appendChild(arrow);
         arrowWrap.appendChild(arrowYaw);
 
-        // --- 階段ノード（PNG：UP/DOWN） ---
+        // --- 階段ノード（PNGではなくテキスト看板） ---
         const stairsGroup = document.createElement('a-entity');
         stairsGroup.setAttribute('id', `stairsGroup-${v}`);
         stairsGroup.setAttribute('position', `${STAIRS_GROUP_POS.x} ${STAIRS_GROUP_POS.y} ${STAIRS_GROUP_POS.z}`);
 
-        const stairsUp = document.createElement('a-image');
-        stairsUp.setAttribute('id', `stairsUp-${v}`);
-        stairsUp.setAttribute('src', '#upStairsImg');
-        stairsUp.setAttribute('fit-image-height', `target: ${STAIRS_TARGET_H}`);
-        stairsUp.setAttribute('face-camera-yaw', '');
-        stairsUp.setAttribute('material', 'shader: flat; transparent: true; alphaTest: 0.01; side: double;');
-
-        const stairsDown = document.createElement('a-image');
-        stairsDown.setAttribute('id', `stairsDown-${v}`);
-        stairsDown.setAttribute('src', '#downStairsImg');
-        stairsDown.setAttribute('fit-image-height', `target: ${STAIRS_TARGET_H}`);
-        stairsDown.setAttribute('face-camera-yaw', '');
-        stairsDown.setAttribute('material', 'shader: flat; transparent: true; alphaTest: 0.01; side: double;');
+        const stairsUp = makeTextSign(`stairsUp-${v}`, '階段を上がってください', STAIRS_TARGET_H);
+        const stairsDown = makeTextSign(`stairsDown-${v}`, '階段を下りてください', STAIRS_TARGET_H);
 
         stairsGroup.appendChild(stairsUp);
         stairsGroup.appendChild(stairsDown);
 
-        // --- 到着ノード（PNG） ---
+        // --- 到着ノード（テキスト看板） ---
         const arrivalGroup = document.createElement('a-entity');
         arrivalGroup.setAttribute('id', `arrivalGroup-${v}`);
         arrivalGroup.setAttribute('position', `${ARRIVAL_GROUP_POS.x} ${ARRIVAL_GROUP_POS.y} ${ARRIVAL_GROUP_POS.z}`);
-        arrivalGroup.setAttribute('face-camera-yaw', '');
 
-        const arrival = document.createElement('a-image');
-        arrival.setAttribute('id', `arrival-${v}`);
-        arrival.setAttribute('src', '#arrivalImg');
-        arrival.setAttribute('fit-image-height', `target: ${ARRIVAL_TARGET_H}`);
-        arrival.setAttribute('material', 'shader: flat; transparent: true; alphaTest: 0.01; side: double;');
-
-        arrivalGroup.appendChild(arrival);
+        const arrivalSign = makeTextSign(`arrival-${v}`, '到着しました', ARRIVAL_TARGET_H);
+        arrivalGroup.appendChild(arrivalSign);
 
         // マーカーにぶら下げる
         marker.appendChild(arrowWrap);
@@ -344,7 +327,7 @@
           continue;
         }
 
-        // 到着（PNGだけ出してHUDは消す）
+        // 到着（テキスト看板だけ出してHUDは消す）
         if (dir === '到着') {
           arrivalGroup.setAttribute('visible', true);
           const hud = document.getElementById('hudMsg');
