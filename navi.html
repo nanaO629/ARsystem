@@ -90,6 +90,18 @@
     const ARROW_TARGET_H   = 0.45;
     const ARROW_YAW_OFFSET = -90;
 
+    // ★壁マーカー向け：矢印を「壁から浮かせる」&「方向に合わせて出す」(m)
+    //   zは壁から手前方向（カメラ側）に浮く量
+    const POS_MAP = {
+      forward: { x:  0.00, y: 0.00, z: 0.90 }, // 直進：正面に大きく
+      back:    { x:  0.00, y: 0.00, z: 0.65 }, // うしろ：浮かせは少なめ（必要なら調整）
+      right:   { x:  0.35, y: 0.00, z: 0.75 }, // 右：右前
+      left:    { x: -0.35, y: 0.00, z: 0.75 }, // 左：左前
+      right45: { x:  0.25, y: 0.00, z: 0.95 }, // 右斜め：さらに前
+      left45:  { x: -0.25, y: 0.00, z: 0.95 }  // 左斜め：さらに前
+    };
+    const POS_DEFAULT = { x: 0.00, y: 0.00, z: 0.75 };
+
     /********************
      * 自作コンポーネント
      ********************/
@@ -183,7 +195,7 @@
       ],
       '8': [
         ['18-19','右'], [9,'到着'], ['1-6','右'], ['7-8','直進'],
-        [10,'左斜め'], ['11-17','left']
+        [10,'左斜め'], ['11-17','左']
       ],
       '9': [
         [1,'右'],['2-3','直進'],[4,'右'],
@@ -264,7 +276,7 @@
 
     function updateActionHUD(room, value) {
       const text = pickAction(room, value);
-      if (!text) return; // 消すのはmarkerFound/markerLost側で制御する
+      if (!text) return;
 
       hudMsg.style.display = 'none';
       hudMsg.textContent = '';
@@ -273,9 +285,7 @@
       hudAction.style.display = 'block';
     }
 
-    /********************
-     * ★黒い棒を強制削除（矢印以外を削除）
-     ********************/
+    // 黒い棒対策：矢印以外を強制削除
     function purgeMarkerKeepArrow(markerEl, arrowWrapId) {
       const kids = Array.from(markerEl.children);
       for (const child of kids) {
@@ -283,12 +293,7 @@
       }
     }
 
-    /********************
-     * ★「たまに出ない」対策：
-     *  - markerLostの即消しをやめる（遅延）
-     *  - 別マーカーの上書きで消えないようにする
-     *  - 矢印マーカーを読んだら階段表示を消す（出っぱなし対策）
-     ********************/
+    // たまに出ない対策
     let activeActionMarker = null;
     let actionHideTimer = null;
 
@@ -303,7 +308,7 @@
         marker.setAttribute('value', String(v));
         marker.setAttribute('id', `m${v}`);
 
-        // 矢印ノード（これだけ）
+        // 矢印ノード
         const arrowWrap = document.createElement('a-entity');
         arrowWrap.setAttribute('id', `arrowWrap-${v}`);
 
@@ -321,16 +326,13 @@
         scene.appendChild(marker);
 
         marker.addEventListener('markerFound', () => {
-          // ★黒い棒（混入3D）掃除
           purgeMarkerKeepArrow(marker, `arrowWrap-${v}`);
 
-          // ★消去タイマー停止（検出ブレ対策）
           if (actionHideTimer) { clearTimeout(actionHideTimer); actionHideTimer = null; }
 
           apply(v);
           updateMsgHUD(room, v);
 
-          // ★階段/到着なら出す。違うなら消す（出っぱなし対策）
           const a = pickAction(room, v);
           if (a) {
             updateActionHUD(room, v);
@@ -343,17 +345,15 @@
         });
 
         marker.addEventListener('markerLost', () => {
-          // ★今表示しているマーカー以外のlostでは消さない（同時検出対策）
           if (activeActionMarker !== v) return;
 
-          // ★すぐ消さず遅延で消す（検出ブレ対策）
           if (actionHideTimer) clearTimeout(actionHideTimer);
           actionHideTimer = setTimeout(() => {
             hudAction.style.display = 'none';
             hudAction.textContent = '';
             activeActionMarker = null;
             actionHideTimer = null;
-          }, 600); // 300〜800msで調整OK
+          }, 600);
         });
       }
 
@@ -361,7 +361,7 @@
     });
 
     /********************
-     * 表示適用（矢印だけ）
+     * 表示適用（★ここで「壁から浮かせる」位置を入れてる）
      ********************/
     function apply(foundValue) {
       const table = plan[room] || {};
@@ -374,7 +374,12 @@
         const arrowWrap = document.getElementById(`arrowWrap-${v}`);
         const arrowYaw  = document.getElementById(`arrowYaw-${v}`);
 
-        if (arrowWrap) arrowWrap.setAttribute('visible', false);
+        if (arrowWrap) {
+          arrowWrap.setAttribute('visible', false);
+          // ★毎回デフォ位置（壁から浮かせる）に戻しておく
+          arrowWrap.setAttribute('position', `${POS_DEFAULT.x} ${POS_DEFAULT.y} ${POS_DEFAULT.z}`);
+        }
+
         if (!dir) continue;
 
         // 階段/到着はAR空間には出さない（HUDだけ）
@@ -382,9 +387,17 @@
           continue;
         }
 
-        const baseYaw = yawMap[normDir(dir)];
+        // ★矢印（回転 + 位置オフセット）
+        const key = normDir(dir);
+        const baseYaw = yawMap[key];
+
         if (typeof baseYaw === 'number') {
           const yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
+
+          // 位置：方向ごとに「壁から浮かせて」「曲がる方向に寄せる」
+          const p = POS_MAP[key] || POS_DEFAULT;
+          arrowWrap.setAttribute('position', `${p.x} ${p.y} ${p.z}`);
+
           arrowWrap.setAttribute('visible', true);
           arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
         }
