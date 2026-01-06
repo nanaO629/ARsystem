@@ -242,11 +242,21 @@
       const d = table[value];
       if (d == null) return null;
       if (d === 0) return "到着しました";
+      return `あと${dd}m`;
+    }
+
+    // ↑ ここ、誤字防止で正しく直す（下の関数で使うから）
+    function pickMsgFixed(room, value) {
+      const table = distRaw[room];
+      if (!table) return null;
+      const d = table[value];
+      if (d == null) return null;
+      if (d === 0) return "到着しました";
       return `あと${d}m`;
     }
 
     function updateMsgHUD(room, value) {
-      const text = pickMsg(room, value);
+      const text = pickMsgFixed(room, value);
       if (!text) {
         hudMsg.style.display = 'none';
         hudMsg.textContent = '';
@@ -256,11 +266,10 @@
       hudMsg.style.display = 'block';
     }
 
-    // 階段/到着は “画面固定テキスト” で出す
+    // 階段/到着は画面固定HUD
     function pickAction(room, value) {
       const dir = (plan[room] || {})[value];
       if (!dir) return null;
-
       if (dir === '階段上' || dir === '階段') return '階段を上がってください';
       if (dir === '階段下') return '階段を下りてください';
       if (dir === '到着') return '到着しました';
@@ -271,12 +280,11 @@
       const text = pickAction(room, value);
 
       if (!text) {
-        hudAction.style.display = 'none';
-        hudAction.textContent = '';
+        // ここでは消さない（markerLost側で遅延消しする）
         return;
       }
 
-      // 階段/到着のときは距離HUDを隠す（邪魔なら）
+      // 階段/到着のときは距離HUDは隠す（好み）
       hudMsg.style.display = 'none';
       hudMsg.textContent = '';
 
@@ -285,8 +293,7 @@
     }
 
     /********************
-     * ★黒い棒（a-plane等）を “強制的に消す”
-     * マーカー直下の子要素を「矢印だけ」残して全削除
+     * ★黒い棒を強制削除（矢印以外を削除）
      ********************/
     function purgeMarkerKeepArrow(markerEl, arrowWrapId) {
       const kids = Array.from(markerEl.children);
@@ -296,7 +303,15 @@
     }
 
     /********************
-     * マーカーの生成（1..MAX_MARKER）
+     * ★「たまに出ない」対策：
+     *  - markerLostの即消しをやめる（遅延）
+     *  - 別マーカーの上書きで消えないようにする
+     ********************/
+    let activeActionMarker = null;  // 今 hudAction を出しているマーカー番号
+    let actionHideTimer = null;     // 遅延消しタイマー
+
+    /********************
+     * マーカー生成
      ********************/
     const scene = document.querySelector('a-scene');
     scene.addEventListener('loaded', () => {
@@ -306,7 +321,7 @@
         marker.setAttribute('value', String(v));
         marker.setAttribute('id', `m${v}`);
 
-        // --- 矢印ノード（GLB）だけ作る ---
+        // 矢印ノード（これだけ）
         const arrowWrap = document.createElement('a-entity');
         arrowWrap.setAttribute('id', `arrowWrap-${v}`);
 
@@ -324,17 +339,37 @@
         scene.appendChild(marker);
 
         marker.addEventListener('markerFound', () => {
-          // ★古い/混入した3D（黒い棒など）を問答無用で消す
+          // ★黒い棒（混入3D）掃除
           purgeMarkerKeepArrow(marker, `arrowWrap-${v}`);
+
+          // ★消去タイマー停止（検出ブレ対策）
+          if (actionHideTimer) { clearTimeout(actionHideTimer); actionHideTimer = null; }
 
           apply(v);
           updateMsgHUD(room, v);
-          updateActionHUD(room, v);
+
+          // ★階段/到着なら中央HUD表示＆アクティブ記録
+          const a = pickAction(room, v);
+          if (a) {
+            updateActionHUD(room, v);
+            activeActionMarker = v;
+          }
         });
 
         marker.addEventListener('markerLost', () => {
-          hudAction.style.display = 'none';
-          hudAction.textContent = '';
+          // ★今表示しているマーカー以外のlostでは消さない（同時検出対策）
+          if (activeActionMarker !== v) return;
+
+          // ★すぐ消さず遅延で消す（検出ブレ対策）
+          if (actionHideTimer) clearTimeout(actionHideTimer);
+          actionHideTimer = setTimeout(() => {
+            hudAction.style.display = 'none';
+            hudAction.textContent = '';
+            activeActionMarker = null;
+            actionHideTimer = null;
+
+            // 階段/到着が消えたら距離HUDは次のfoundでまた出る
+          }, 600); // 300〜800msで調整OK
         });
       }
 
@@ -358,12 +393,12 @@
         if (arrowWrap) arrowWrap.setAttribute('visible', false);
         if (!dir) continue;
 
-        // 階段/到着は “HUDだけ” にして、AR空間には何も出さない
+        // 階段/到着はAR空間には出さない（HUDだけ）
         if (dir === '階段' || dir === '階段上' || dir === '階段下' || dir === '到着') {
           continue;
         }
 
-        // 矢印（回転）
+        // 矢印回転
         const baseYaw = yawMap[normDir(dir)];
         if (typeof baseYaw === 'number') {
           const yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
