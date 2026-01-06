@@ -31,16 +31,18 @@
 <body>
   <!-- ===== A-Frame / AR.js シーン ===== -->
   <a-scene
-    embedded
-    renderer="colorManagement: true;"
-    arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false"
-  >
+  embedded
+  vr-mode-ui="enabled: false"
+  renderer="colorManagement: true;"
+  arjs="sourceType: webcam; sourceWidth:1280; sourceHeight:720; displayWidth:1280; displayHeight:720; facingMode: environment; debugUIEnabled: false">
+
     <!-- 3Dアセットを先読み -->
     <a-assets timeout="15000">
-      <a-asset-item id="arrowModel"      src="arrow.glb"></a-asset-item>
-      <a-asset-item id="upStairsModel"   src="up stairs.glb"></a-asset-item>
-      <a-asset-item id="downStairsModel" src="down stairs.glb"></a-asset-item>
-      <a-asset-item id="arrivalModel"    src="arrival.glb"></a-asset-item>
+      <a-asset-item id="arrowModel"   src="arrow.glb"></a-asset-item>
+      <!-- 階段は PNG に変更 -->
+      <img id="img-stairs-up"   src="up_stairs.png">
+      <img id="img-stairs-down" src="down_stairs.png">
+      <a-asset-item id="arrivalModel" src="arrival.glb"></a-asset-item>
     </a-assets>
 
     <!-- カメラ -->
@@ -60,16 +62,13 @@
      * 表示パラメータ
      ********************/
     const ARROW_TARGET_H   = 0.45; // 矢印の見かけ高さ(m)
-    const STAIRS_TARGET_H  = 0.60; // 階段の見かけ高さ(m)
     const ARRIVAL_TARGET_H = 0.60; // 到着表示の見かけ高さ(m)
-    const ARROW_YAW_OFFSET = -90;  // 矢印GLBの前向き補正（モデルに合わせて調整）
-    const STAIRS_GROUP_POS = { x:0, y:0.8, z:0 }; // 階段看板の位置
-    const ARRIVAL_GROUP_POS= { x:0, y:0.8, z:0 }; // 到着看板の位置
+    const ARROW_YAW_OFFSET = -90;  // 矢印GLBの前向き補正
+    const PNG_Y_POS        = 1.15; // PNG(階段札)の高さ
 
     /********************
      * 自作コンポーネント
      ********************/
-    // GLBの全高を指定値に合わせる（モデルのバウンディングから自動スケール）
     AFRAME.registerComponent('fit-model-height', {
       schema: { target: { type: 'number', default: 0.6 } },
       init() {
@@ -86,7 +85,6 @@
       }
     });
 
-    // 看板のようにY軸だけカメラへ正対させる（上下の傾きは追従しない）
     AFRAME.registerComponent('face-camera-yaw', {
       tick() {
         const cam = this.el.sceneEl && this.el.sceneEl.camera;
@@ -97,6 +95,24 @@
         const dz = cam.position.z - pos.z;
         const yaw = Math.atan2(dx, dz) * 180 / Math.PI;
         this.el.setAttribute('rotation', `0 ${yaw} 0`);
+      }
+    });
+
+    AFRAME.registerComponent('always-on-top', {
+      init(){ this.el.object3D.traverse(o=>{
+        if (o.material){ o.material.depthTest = false; o.renderOrder = 9999; }
+      });}
+    });
+
+    AFRAME.registerComponent('scale-by-distance', {
+      schema: { k:{type:'number',default:0.18}, min:{type:'number',default:0.8}, max:{type:'number',default:2.0} },
+      tick(){
+        const cam = this.el.sceneEl && this.el.sceneEl.camera; if(!cam) return;
+        const p = new THREE.Vector3(), c = new THREE.Vector3();
+        this.el.object3D.getWorldPosition(p); cam.getWorldPosition(c);
+        const d = p.distanceTo(c);
+        const s = THREE.MathUtils.clamp(this.data.k * d, this.data.min, this.data.max);
+        this.el.setAttribute('scale', `${s} ${s} ${s}`);
       }
     });
 
@@ -150,6 +166,7 @@
       return out;
     }
 
+    /* === plan（必要に応じて編集OK） === */
     const plan = buildPlan({
       '3': [
         [1,'右'], [2,'到着'], [3,'到着'],
@@ -201,7 +218,7 @@
     const room = new URLSearchParams(location.search).get('room') || '3';
 
     /********************
-     * マーカーの生成（1..MAX_MARKER）
+     * マーカー生成（1..MAX_MARKER）＋PNG階段ノード
      ********************/
     const scene = document.querySelector('a-scene');
     scene.addEventListener('loaded', () => {
@@ -211,7 +228,7 @@
         marker.setAttribute('value', String(v));
         marker.setAttribute('id', `m${v}`);
 
-        // --- 矢印ノード ---
+        // --- 矢印ノード（GLB） ---
         const arrowWrap = document.createElement('a-entity');
         arrowWrap.setAttribute('id', `arrowWrap-${v}`);
         const arrowYaw = document.createElement('a-entity');
@@ -222,27 +239,36 @@
         arrowYaw.appendChild(arrow);
         arrowWrap.appendChild(arrowYaw);
 
-        // --- 階段ノード（UP/DOWN） ---
-        const stairsGroup = document.createElement('a-entity');
-        stairsGroup.setAttribute('id', `stairsGroup-${v}`);
-        stairsGroup.setAttribute('position', `${STAIRS_GROUP_POS.x} ${STAIRS_GROUP_POS.y} ${STAIRS_GROUP_POS.z}`);
-        const stairsUp = document.createElement('a-entity');
-        stairsUp.setAttribute('id', `stairsUp-${v}`);
-        stairsUp.setAttribute('gltf-model', '#upStairsModel');
-        stairsUp.setAttribute('fit-model-height', `target: ${STAIRS_TARGET_H}`);
-        stairsUp.setAttribute('face-camera-yaw', '');
-        const stairsDown = document.createElement('a-entity');
-        stairsDown.setAttribute('id', `stairsDown-${v}`);
-        stairsDown.setAttribute('gltf-model', '#downStairsModel');
-        stairsDown.setAttribute('fit-model-height', `target: ${STAIRS_TARGET_H}`);
-        stairsDown.setAttribute('face-camera-yaw', '');
-        stairsGroup.appendChild(stairsUp);
-        stairsGroup.appendChild(stairsDown);
+        // --- 階段PNG（上り/下り） ---
+        const stairsPNG = document.createElement('a-entity');
+        stairsPNG.setAttribute('id', `stairsPNG-${v}`);
+        stairsPNG.setAttribute('position', `0 ${PNG_Y_POS} 0`);
+        stairsPNG.setAttribute('face-camera-yaw', '');
+        stairsPNG.setAttribute('scale-by-distance','k:0.18; min:0.8; max:2.0');
+        stairsPNG.setAttribute('always-on-top','');
 
-        // --- 到着ノード ---
+        const stairsUpImg = document.createElement('a-image');
+        stairsUpImg.setAttribute('id', `stairsUpImg-${v}`);
+        stairsUpImg.setAttribute('src', '#img-stairs-up');
+        stairsUpImg.setAttribute('width','1.2');
+        stairsUpImg.setAttribute('height','0.42');
+        stairsUpImg.setAttribute('side','double');
+        stairsUpImg.setAttribute('transparent','true');
+        stairsPNG.appendChild(stairsUpImg);
+
+        const stairsDownImg = document.createElement('a-image');
+        stairsDownImg.setAttribute('id', `stairsDownImg-${v}`);
+        stairsDownImg.setAttribute('src', '#img-stairs-down');
+        stairsDownImg.setAttribute('width','1.2');
+        stairsDownImg.setAttribute('height','0.42');
+        stairsDownImg.setAttribute('side','double');
+        stairsDownImg.setAttribute('transparent','true');
+        stairsPNG.appendChild(stairsDownImg);
+
+        // --- 到着ノード（GLB） ---
         const arrivalGroup = document.createElement('a-entity');
         arrivalGroup.setAttribute('id', `arrivalGroup-${v}`);
-        arrivalGroup.setAttribute('position', `${ARRIVAL_GROUP_POS.x} ${ARRIVAL_GROUP_POS.y} ${ARRIVAL_GROUP_POS.z}`);
+        arrivalGroup.setAttribute('position', `0 1.2 0`);
         arrivalGroup.setAttribute('face-camera-yaw', '');
         const arrival = document.createElement('a-entity');
         arrival.setAttribute('id', `arrival-${v}`);
@@ -250,20 +276,19 @@
         arrival.setAttribute('fit-model-height', `target: ${ARRIVAL_TARGET_H}`);
         arrivalGroup.appendChild(arrival);
 
-        // マーカーにぶら下げる
+        // ぶら下げ
         marker.appendChild(arrowWrap);
-        marker.appendChild(stairsGroup);
+        marker.appendChild(stairsPNG);
         marker.appendChild(arrivalGroup);
         scene.appendChild(marker);
 
-        // 検出イベント：表示適用＋メッセージ更新
+        // 検出イベント
         marker.addEventListener('markerFound', () => {
           apply(v);
           updateMsgHUD(room, v);
         });
       }
-      // 初期反映
-      apply();
+      apply(); // 初期反映
     });
 
     /********************
@@ -277,33 +302,36 @@
       for (let v = loopFrom; v <= loopTo; v++) {
         const dir = table[v];
 
-        const arrowWrap   = document.getElementById(`arrowWrap-${v}`);
-        const arrowYaw    = document.getElementById(`arrowYaw-${v}`);
-        const stairsGroup = document.getElementById(`stairsGroup-${v}`);
-        const stairsUp    = document.getElementById(`stairsUp-${v}`);
-        const stairsDown  = document.getElementById(`stairsDown-${v}`);
-        const arrivalGroup= document.getElementById(`arrivalGroup-${v}`);
+        const arrowWrap     = document.getElementById(`arrowWrap-${v}`);
+        const arrowYaw      = document.getElementById(`arrowYaw-${v}`);
+        const stairsPNG     = document.getElementById(`stairsPNG-${v}`);
+        const stairsUpImg   = document.getElementById(`stairsUpImg-${v}`);
+        const stairsDownImg = document.getElementById(`stairsDownImg-${v}`);
+        const arrivalGroup  = document.getElementById(`arrivalGroup-${v}`);
 
         // いったん全部非表示
         if (arrowWrap)    arrowWrap.setAttribute('visible', false);
-        if (stairsGroup)  stairsGroup.setAttribute('visible', false);
-        if (stairsUp)     stairsUp.setAttribute('visible', false);
-        if (stairsDown)   stairsDown.setAttribute('visible', false);
+        if (stairsPNG)    stairsPNG.setAttribute('visible', false);
+        if (stairsUpImg)  stairsUpImg.setAttribute('visible', false);
+        if (stairsDownImg)stairsDownImg.setAttribute('visible', false);
         if (arrivalGroup) arrivalGroup.setAttribute('visible', false);
 
         if (!dir) continue;
 
-        // 階段
+        // PNG階段
         if (dir === '階段' || dir === '階段上' || dir === '階段下') {
-          stairsGroup.setAttribute('visible', true);
-          if (dir === '階段下') stairsDown.setAttribute('visible', true);
-          else stairsUp.setAttribute('visible', true); // '階段' は上り扱い
+          if (stairsPNG) stairsPNG.setAttribute('visible', true);
+          if (dir === '階段下') {
+            if (stairsDownImg) stairsDownImg.setAttribute('visible', true);
+          } else {
+            if (stairsUpImg) stairsUpImg.setAttribute('visible', true); // '階段' は上り扱い
+          }
           continue;
         }
 
-        // 到着（GLBだけ出してHUDは消す）
+        // 到着
         if (dir === '到着') {
-          arrivalGroup.setAttribute('visible', true);
+          if (arrivalGroup) arrivalGroup.setAttribute('visible', true);
           const hud = document.getElementById('hudMsg');
           if (hud) { hud.style.display = 'none'; hud.textContent = ''; }
           continue;
@@ -313,64 +341,42 @@
         const baseYaw = yawMap[normDir(dir)];
         if (typeof baseYaw === 'number') {
           const yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
-          arrowWrap.setAttribute('visible', true);
-          arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
+          if (arrowWrap) arrowWrap.setAttribute('visible', true);
+          if (arrowYaw)  arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
         }
       }
     }
 
-    
+    /********************
+     * 距離HUD（必要なら編集）
+     ********************/
     const distRaw = {
-  '3': { 1: 11, 2: 0, 3: 0, 4: 11, 5: 19, 6: 42, 7: 50, 8: 59, 9: 61, 10: 63, 11: 74, 12: 74, 13: 85, 14: 98, 15: 87, 16: 101, 17: 111, 18: 11, 19: 20, 20: 39, 21: 43, 22: 52, 23: 69, 24: 69, 25: 59, 26: 62, 27: 67, 28: 80 },
+      '3': { 1: 11, 2: 0, 3: 0, 4: 11, 5: 19, 6: 42, 7: 50, 8: 59, 9: 61, 10: 63, 11: 74, 12: 74, 13: 85, 14: 98, 15: 87, 16: 101, 17: 111, 18: 11, 19: 20, 20: 39, 21: 43, 22: 52, 23: 69, 24: 69, 25: 59, 26: 62, 27: 67, 28: 80 },
+      '4': { 1: 20, 2: 11, 3: 13, 4: 4, 5: 10, 6: 33, 7: 40, 8: 49, 9: 51, 10: 55, 11: 65, 12: 65, 13: 76, 14: 88, 15: 78, 16: 92, 17: 102, 18: 0, 19: 10, 20: 30, 21: 34, 22: 42, 23: 60, 24: 60, 25: 49, 26: 53, 27: 58, 28: 70 },
+      '5': { 1: 27, 2: 20, 3: 22, 4: 11, 5: 4, 6: 23, 7: 30, 8: 39, 9: 41, 10: 44, 11: 55, 12: 54, 13: 66, 14: 78, 15: 68, 16: 82, 17: 92, 18: 10, 19: 0, 20: 24, 21: 28, 22: 37, 23: 54, 24: 54, 25: 44, 26: 43, 27: 48, 28: 60 },
+      '6': { 1: 54, 2: 50, 3: 50, 4: 40, 5: 31, 6: 8, 7: 0, 8: 9, 9: 12, 10: 16, 11: 26, 12: 25, 13: 36, 14: 49, 15: 39, 16: 52, 17: 62, 18: 40, 19: 30, 20: 51, 21: 55, 22: 64, 23: 81, 24: 81, 25: 46, 26: 28, 27: 33, 28: 45 },
+      '7': { 1: 63, 2: 59, 3: 59, 4: 50, 5: 41, 6: 17, 7: 9, 8: 0, 9: 4, 10: 9, 11: 17, 12: 16, 13: 27, 14: 39, 15: 29, 16: 43, 17: 53, 18: 49, 19: 39, 20: 61, 21: 65, 22: 73, 23: 91, 24: 91, 25: 55, 26: 37, 27: 42, 28: 54 },
+      '8': { 1: 65, 2: 60, 3: 60, 4: 50, 5: 41, 6: 18, 7: 11, 8: 4, 9: 1, 10: 6, 11: 15, 12: 14, 13: 25, 14: 38, 15: 28, 16: 42, 17: 51, 18: 50, 19: 40, 20: 61, 21: 65, 22: 74, 23: 92, 24: 92, 25: 55, 26: 38, 27: 43, 28: 55 },
+      '9': { 1: 79, 2: 71, 3: 69, 4: 59, 5: 50, 6: 74, 7: 81, 8: 91, 9: 92, 10: 95, 11: 106, 12: 106, 13: 117, 14: 129, 15: 119, 16: 133, 17: 143, 18: 60, 19: 54, 20: 30, 21: 31, 22: 19, 23: 0, 24: 4, 25: 50, 26: 68, 27: 72, 28: 84 },
+      '10': { 1: 53, 2: 45, 3: 43, 4: 33, 5: 24, 6: 48, 7: 55, 8: 65, 9: 66, 10: 69, 11: 80, 12: 80, 13: 91, 14: 103, 15: 93, 16: 107, 17: 117, 18: 34, 19: 28, 20: 4, 21: 0, 22: 12, 23: 31, 24: 31, 25: 20, 26: 37, 27: 42, 28: 54 },
+      '11': { 1: 79, 2: 71, 3: 69, 4: 59, 5: 50, 6: 74, 7: 81, 8: 91, 9: 92, 10: 95, 11: 106, 12: 106, 13: 117, 14: 129, 15: 119, 16: 133, 17: 143, 18: 60, 19: 54, 20: 30, 21: 31, 22: 20, 23: 4, 24: 0, 25: 50, 26: 67, 27: 72, 28: 84 },
+      'gakumu': { 1: 86, 2: 80, 3: 80, 4: 70, 5: 61, 6: 37, 7: 45, 8: 54, 9: 55, 10: 59, 11: 69, 12: 69, 13: 80, 14: 93, 15: 83, 16: 96, 17: 106, 18: 70, 19: 60, 20: 54, 21: 54, 22: 66, 23: 84, 24: 84, 25: 35, 26: 17, 27: 12, 28: 0 },
+      'free': { 1: 115, 2: 112, 3: 111, 4: 102, 5: 93, 6: 69, 7: 62, 8: 53, 9: 51, 10: 48, 11: 37, 12: 37, 13: 26, 14: 14, 15: 24, 16: 10, 17: 0, 18: 102, 19: 92, 20: 113, 21: 117, 22: 126, 23: 143, 24: 143, 25: 106, 26: 89, 27: 94, 28: 106 },
+    };
 
-  '4': { 1: 20, 2: 11, 3: 13, 4: 4, 5: 10, 6: 33, 7: 40, 8: 49, 9: 51, 10: 55, 11: 65, 12: 65, 13: 76, 14: 88, 15: 78, 16: 92, 17: 102, 18: 0, 19: 10, 20: 30, 21: 34, 22: 42, 23: 60, 24: 60, 25: 49, 26: 53, 27: 58, 28: 70 },
-
-  '5': { 1: 27, 2: 20, 3: 22, 4: 11, 5: 4, 6: 23, 7: 30, 8: 39, 9: 41, 10: 44, 11: 55, 12: 54, 13: 66, 14: 78, 15: 68, 16: 82, 17: 92, 18: 10, 19: 0, 20: 24, 21: 28, 22: 37, 23: 54, 24: 54, 25: 44, 26: 43, 27: 48, 28: 60 },
-
-  '6': { 1: 54, 2: 50, 3: 50, 4: 40, 5: 31, 6: 8, 7: 0, 8: 9, 9: 12, 10: 16, 11: 26, 12: 25, 13: 36, 14: 49, 15: 39, 16: 52, 17: 62, 18: 40, 19: 30, 20: 51, 21: 55, 22: 64, 23: 81, 24: 81, 25: 46, 26: 28, 27: 33, 28: 45 },
-
-  '7': { 1: 63, 2: 59, 3: 59, 4: 50, 5: 41, 6: 17, 7: 9, 8: 0, 9: 4, 10: 9, 11: 17, 12: 16, 13: 27, 14: 39, 15: 29, 16: 43, 17: 53, 18: 49, 19: 39, 20: 61, 21: 65, 22: 73, 23: 91, 24: 91, 25: 55, 26: 37, 27: 42, 28: 54 },
-
-  '8': { 1: 65, 2: 60, 3: 60, 4: 50, 5: 41, 6: 18, 7: 11, 8: 4, 9: 1, 10: 6, 11: 15, 12: 14, 13: 25, 14: 38, 15: 28, 16: 42, 17: 51, 18: 50, 19: 40, 20: 61, 21: 65, 22: 74, 23: 92, 24: 92, 25: 55, 26: 38, 27: 43, 28: 55 },
-
-  '9': { 1: 79, 2: 71, 3: 69, 4: 59, 5: 50, 6: 74, 7: 81, 8: 91, 9: 92, 10: 95, 11: 106, 12: 106, 13: 117, 14: 129, 15: 119, 16: 133, 17: 143, 18: 60, 19: 54, 20: 30, 21: 31, 22: 19, 23: 0, 24: 4, 25: 50, 26: 68, 27: 72, 28: 84 },
-
-  '10': { 1: 53, 2: 45, 3: 43, 4: 33, 5: 24, 6: 48, 7: 55, 8: 65, 9: 66, 10: 69, 11: 80, 12: 80, 13: 91, 14: 103, 15: 93, 16: 107, 17: 117, 18: 34, 19: 28, 20: 4, 21: 0, 22: 12, 23: 31, 24: 31, 25: 20, 26: 37, 27: 42, 28: 54 },
-
-  '11': { 1: 79, 2: 71, 3: 69, 4: 59, 5: 50, 6: 74, 7: 81, 8: 91, 9: 92, 10: 95, 11: 106, 12: 106, 13: 117, 14: 129, 15: 119, 16: 133, 17: 143, 18: 60, 19: 54, 20: 30, 21: 31, 22: 20, 23: 4, 24: 0, 25: 50, 26: 67, 27: 72, 28: 84 },
-
-  'gakumu': { 1: 86, 2: 80, 3: 80, 4: 70, 5: 61, 6: 37, 7: 45, 8: 54, 9: 55, 10: 59, 11: 69, 12: 69, 13: 80, 14: 93, 15: 83, 16: 96, 17: 106, 18: 70, 19: 60, 20: 54, 21: 54, 22: 66, 23: 84, 24: 84, 25: 35, 26: 17, 27: 12, 28: 0 },
-
-  'free': { 1: 115, 2: 112, 3: 111, 4: 102, 5: 93, 6: 69, 7: 62, 8: 53, 9: 51, 10: 48, 11: 37, 12: 37, 13: 26, 14: 14, 15: 24, 16: 10, 17: 0, 18: 102, 19: 92, 20: 113, 21: 117, 22: 126, 23: 143, 24: 143, 25: 106, 26: 89, 27: 94, 28: 106 },
-};
-
-
-    // HUD 要素
     const hudMsg = document.getElementById('hudMsg');
-
-    // room と marker番号からメッセージ文字列を返す
     function pickMsg(room, value) {
       const table = distRaw[room];
       if (!table) return null;
-
       const d = table[value];
       if (d == null) return null;
-
       if (d === 0) return "到着しました";
       return `あと${d}m`;
     }
-
-    // HUD 更新
     function updateMsgHUD(room, value) {
       const text = pickMsg(room, value);
-
-      if (!text) {
-        hudMsg.style.display = 'none';
-        hudMsg.textContent = '';
-        return;
-      }
-      hudMsg.textContent = text;
-      hudMsg.style.display = 'block';
+      if (!text) { hudMsg.style.display = 'none'; hudMsg.textContent = ''; return; }
+      hudMsg.textContent = text; hudMsg.style.display = 'block';
     }
   </script>
 </body>
