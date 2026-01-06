@@ -7,7 +7,7 @@
   <style>
     body{margin:0; overflow:hidden;}
 
-    /* ▼ 右下：距離HUD（既存） */
+    /* ▼ 右下：距離HUD */
     #hudMsg {
       position: fixed;
       right: 12px;
@@ -27,7 +27,7 @@
       word-break: break-word;
     }
 
-    /* ▼ 中央下：階段/到着HUD（追加：大きめ・画面固定） */
+    /* ▼ 中央下：階段/到着HUD（大きめ・画面固定） */
     #hudAction{
       position: fixed;
       left: 50%;
@@ -66,19 +66,16 @@
     renderer="colorManagement: true;"
     arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false"
   >
-    <!-- 3Dアセット（矢印だけGLB） -->
+    <!-- 矢印だけGLB -->
     <a-assets timeout="15000">
       <a-asset-item id="arrowModel" src="arrow.glb"></a-asset-item>
     </a-assets>
 
-    <!-- カメラ -->
     <a-entity camera></a-entity>
   </a-scene>
 
-  <!-- ▼ 右下：距離HUD -->
+  <!-- HUD -->
   <div id="hudMsg" aria-live="polite"></div>
-
-  <!-- ▼ 中央下：階段/到着HUD -->
   <div id="hudAction" aria-live="polite"></div>
 
   <script>
@@ -90,13 +87,12 @@
     /********************
      * 表示パラメータ
      ********************/
-    const ARROW_TARGET_H   = 0.45; // 矢印の見かけ高さ(m)
-    const ARROW_YAW_OFFSET = -90;  // 矢印GLBの前向き補正
+    const ARROW_TARGET_H   = 0.45;
+    const ARROW_YAW_OFFSET = -90;
 
     /********************
      * 自作コンポーネント
      ********************/
-    // GLBの全高を指定値に合わせる（モデルのバウンディングから自動スケール）
     AFRAME.registerComponent('fit-model-height', {
       schema: { target: { type: 'number', default: 0.6 } },
       init() {
@@ -187,7 +183,7 @@
       ],
       '8': [
         ['18-19','右'], [9,'到着'], ['1-6','右'], ['7-8','直進'],
-        [10,'左斜め'], ['11-17','左']
+        [10,'左斜め'], ['11-17','left']
       ],
       '9': [
         [1,'右'],['2-3','直進'],[4,'右'],
@@ -214,7 +210,7 @@
     const room = new URLSearchParams(location.search).get('room') || '3';
 
     /********************
-     * HUD
+     * HUD 要素
      ********************/
     const hudMsg = document.getElementById('hudMsg');
     const hudAction = document.getElementById('hudAction');
@@ -242,21 +238,11 @@
       const d = table[value];
       if (d == null) return null;
       if (d === 0) return "到着しました";
-      return `あと${dd}m`;
-    }
-
-    // ↑ ここ、誤字防止で正しく直す（下の関数で使うから）
-    function pickMsgFixed(room, value) {
-      const table = distRaw[room];
-      if (!table) return null;
-      const d = table[value];
-      if (d == null) return null;
-      if (d === 0) return "到着しました";
       return `あと${d}m`;
     }
 
     function updateMsgHUD(room, value) {
-      const text = pickMsgFixed(room, value);
+      const text = pickMsg(room, value);
       if (!text) {
         hudMsg.style.display = 'none';
         hudMsg.textContent = '';
@@ -278,13 +264,8 @@
 
     function updateActionHUD(room, value) {
       const text = pickAction(room, value);
+      if (!text) return; // 消すのはmarkerFound/markerLost側で制御する
 
-      if (!text) {
-        // ここでは消さない（markerLost側で遅延消しする）
-        return;
-      }
-
-      // 階段/到着のときは距離HUDは隠す（好み）
       hudMsg.style.display = 'none';
       hudMsg.textContent = '';
 
@@ -306,9 +287,10 @@
      * ★「たまに出ない」対策：
      *  - markerLostの即消しをやめる（遅延）
      *  - 別マーカーの上書きで消えないようにする
+     *  - 矢印マーカーを読んだら階段表示を消す（出っぱなし対策）
      ********************/
-    let activeActionMarker = null;  // 今 hudAction を出しているマーカー番号
-    let actionHideTimer = null;     // 遅延消しタイマー
+    let activeActionMarker = null;
+    let actionHideTimer = null;
 
     /********************
      * マーカー生成
@@ -348,11 +330,15 @@
           apply(v);
           updateMsgHUD(room, v);
 
-          // ★階段/到着なら中央HUD表示＆アクティブ記録
+          // ★階段/到着なら出す。違うなら消す（出っぱなし対策）
           const a = pickAction(room, v);
           if (a) {
             updateActionHUD(room, v);
             activeActionMarker = v;
+          } else {
+            hudAction.style.display = 'none';
+            hudAction.textContent = '';
+            activeActionMarker = null;
           }
         });
 
@@ -367,8 +353,6 @@
             hudAction.textContent = '';
             activeActionMarker = null;
             actionHideTimer = null;
-
-            // 階段/到着が消えたら距離HUDは次のfoundでまた出る
           }, 600); // 300〜800msで調整OK
         });
       }
@@ -398,7 +382,6 @@
           continue;
         }
 
-        // 矢印回転
         const baseYaw = yawMap[normDir(dir)];
         if (typeof baseYaw === 'number') {
           const yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
