@@ -6,7 +6,8 @@
   <title>AR Navi</title>
   <style>
     body{margin:0; overflow:hidden;}
-    /* ▼ 右下メッセージHUD */
+
+    /* ▼ 右下：距離HUD（既存） */
     #hudMsg {
       position: fixed;
       right: 12px;
@@ -21,10 +22,40 @@
       line-height: 1.5;
       max-width: min(60vw, 320px);
       backdrop-filter: blur(6px);
-      display: none; /* 初期は非表示 */
+      -webkit-backdrop-filter: blur(6px);
+      display: none;
+      word-break: break-word;
+    }
+
+    /* ▼ 中央下：階段/到着HUD（追加：大きめ・画面固定） */
+    #hudAction{
+      position: fixed;
+      left: 50%;
+      bottom: 110px;
+      transform: translateX(-50%);
+      z-index: 10000;
+
+      background: rgba(0,0,0,0.88);
+      color: #fff;
+      border: 2px solid rgba(255,255,255,0.65);
+      border-radius: 18px;
+
+      padding: 14px 18px;
+      font-size: 24px;
+      font-weight: 900;
+      line-height: 1.2;
+      text-align: center;
+      min-width: 240px;
+
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      text-shadow: 0 2px 6px rgba(0,0,0,0.95);
+
+      display: none;
+      user-select: none;
       word-break: break-word;
     }
   </style>
+
   <script src="aframe.min.js"></script>
   <script src="aframe-ar.js"></script>
 </head>
@@ -35,7 +66,7 @@
     renderer="colorManagement: true;"
     arjs="sourceType: webcam; detectionMode: mono_and_matrix; matrixCodeType: 3x3; debugUIEnabled: false"
   >
-    <!-- 3Dアセットを先読み（矢印だけGLBのまま） -->
+    <!-- 3Dアセット（矢印だけGLB） -->
     <a-assets timeout="15000">
       <a-asset-item id="arrowModel" src="arrow.glb"></a-asset-item>
     </a-assets>
@@ -44,8 +75,11 @@
     <a-entity camera></a-entity>
   </a-scene>
 
-  <!-- ▼ 右下メッセージHUD -->
+  <!-- ▼ 右下：距離HUD -->
   <div id="hudMsg" aria-live="polite"></div>
+
+  <!-- ▼ 中央下：階段/到着HUD -->
+  <div id="hudAction" aria-live="polite"></div>
 
   <script>
     /********************
@@ -57,11 +91,7 @@
      * 表示パラメータ
      ********************/
     const ARROW_TARGET_H   = 0.45; // 矢印の見かけ高さ(m)
-    const STAIRS_TARGET_H  = 1.00; // ★階段テキスト看板の見かけ高さ(m)（大きめ）
-    const ARRIVAL_TARGET_H = 1.00; // ★到着テキスト看板の見かけ高さ(m)（大きめ）
-    const ARROW_YAW_OFFSET = -90;  // 矢印GLBの前向き補正（モデルに合わせて調整）
-    const STAIRS_GROUP_POS = { x:0, y:1.0, z:0 }; // 階段看板の位置（少し上）
-    const ARRIVAL_GROUP_POS= { x:0, y:1.0, z:0 }; // 到着看板の位置（少し上）
+    const ARROW_YAW_OFFSET = -90;  // 矢印GLBの前向き補正
 
     /********************
      * 自作コンポーネント
@@ -82,58 +112,6 @@
         });
       }
     });
-
-    // 看板のようにY軸だけカメラへ正対させる（上下の傾きは追従しない）
-    AFRAME.registerComponent('face-camera-yaw', {
-      tick() {
-        const cam = this.el.sceneEl && this.el.sceneEl.camera;
-        if (!cam) return;
-        const pos = new THREE.Vector3();
-        this.el.object3D.getWorldPosition(pos);
-        const dx = cam.position.x - pos.x;
-        const dz = cam.position.z - pos.z;
-        const yaw = Math.atan2(dx, dz) * 180 / Math.PI;
-        this.el.setAttribute('rotation', `0 ${yaw} 0`);
-      }
-    });
-
-    /********************
-     * 文字看板（背景板 + テキスト）を作る
-     ********************/
-    function makeTextSign(id, text, heightM) {
-      const group = document.createElement('a-entity');
-      group.setAttribute('id', id);
-      group.setAttribute('face-camera-yaw', '');
-
-      // 背景板
-      const bg = document.createElement('a-plane');
-      const planeH = heightM;
-      const planeW = heightM * 2.2;  // 横は少し広め
-      bg.setAttribute('height', planeH);
-      bg.setAttribute('width',  planeW);
-      bg.setAttribute('color', '#000');
-      bg.setAttribute('opacity', '0.82');
-      bg.setAttribute('material', 'shader: flat; side: double; transparent: true;');
-      bg.setAttribute('position', '0 0 0');
-
-      // テキスト（a-textより確実に動くよう text コンポーネントで）
-      const t = document.createElement('a-entity');
-      t.setAttribute('position', '0 0 0.01');
-      t.setAttribute(
-        'text',
-        `value: ${text};
-         align: center;
-         color: #fff;
-         width: ${planeW * 0.95};
-         wrapCount: 14;
-         baseline: center;
-         shader: msdf;`
-      );
-
-      group.appendChild(bg);
-      group.appendChild(t);
-      return group;
-    }
 
     /********************
      * 方向の正規化 + 矢印角度
@@ -236,6 +214,88 @@
     const room = new URLSearchParams(location.search).get('room') || '3';
 
     /********************
+     * HUD
+     ********************/
+    const hudMsg = document.getElementById('hudMsg');
+    const hudAction = document.getElementById('hudAction');
+
+    /********************
+     * 距離データ
+     ********************/
+    const distRaw = {
+      '3': { 1: 11, 2: 0, 3: 0, 4: 11, 5: 19, 6: 42, 7: 50, 8: 59, 9: 61, 10: 63, 11: 74, 12: 74, 13: 85, 14: 98, 15: 87, 16: 101, 17: 111, 18: 11, 19: 20, 20: 39, 21: 43, 22: 52, 23: 69, 24: 69, 25: 59, 26: 62, 27: 67, 28: 80 },
+      '4': { 1: 20, 2: 11, 3: 13, 4: 4, 5: 10, 6: 33, 7: 40, 8: 49, 9: 51, 10: 55, 11: 65, 12: 65, 13: 76, 14: 88, 15: 78, 16: 92, 17: 102, 18: 0, 19: 10, 20: 30, 21: 34, 22: 42, 23: 60, 24: 60, 25: 49, 26: 53, 27: 58, 28: 70 },
+      '5': { 1: 27, 2: 20, 3: 22, 4: 11, 5: 4, 6: 23, 7: 30, 8: 39, 9: 41, 10: 44, 11: 55, 12: 54, 13: 66, 14: 78, 15: 68, 16: 82, 17: 92, 18: 10, 19: 0, 20: 24, 21: 28, 22: 37, 23: 54, 24: 54, 25: 44, 26: 43, 27: 48, 28: 60 },
+      '6': { 1: 54, 2: 50, 3: 50, 4: 40, 5: 31, 6: 8, 7: 0, 8: 9, 9: 12, 10: 16, 11: 26, 12: 25, 13: 36, 14: 49, 15: 39, 16: 52, 17: 62, 18: 40, 19: 30, 20: 51, 21: 55, 22: 64, 23: 81, 24: 81, 25: 46, 26: 28, 27: 33, 28: 45 },
+      '7': { 1: 63, 2: 59, 3: 59, 4: 50, 5: 41, 6: 17, 7: 9, 8: 0, 9: 4, 10: 9, 11: 17, 12: 16, 13: 27, 14: 39, 15: 29, 16: 43, 17: 53, 18: 49, 19: 39, 20: 61, 21: 65, 22: 73, 23: 91, 24: 91, 25: 55, 26: 37, 27: 42, 28: 54 },
+      '8': { 1: 65, 2: 60, 3: 60, 4: 50, 5: 41, 6: 18, 7: 11, 8: 4, 9: 1, 10: 6, 11: 15, 12: 14, 13: 25, 14: 38, 15: 28, 16: 42, 17: 51, 18: 50, 19: 40, 20: 61, 21: 65, 22: 74, 23: 92, 24: 92, 25: 55, 26: 38, 27: 43, 28: 55 },
+      '9': { 1: 79, 2: 71, 3: 69, 4: 59, 5: 50, 6: 74, 7: 81, 8: 91, 9: 92, 10: 95, 11: 106, 12: 106, 13: 117, 14: 129, 15: 119, 16: 133, 17: 143, 18: 60, 19: 54, 20: 30, 21: 31, 22: 19, 23: 0, 24: 4, 25: 50, 26: 68, 27: 72, 28: 84 },
+      '10': { 1: 53, 2: 45, 3: 43, 4: 33, 5: 24, 6: 48, 7: 55, 8: 65, 9: 66, 10: 69, 11: 80, 12: 80, 13: 91, 14: 103, 15: 93, 16: 107, 17: 117, 18: 34, 19: 28, 20: 4, 21: 0, 22: 12, 23: 31, 24: 31, 25: 20, 26: 37, 27: 42, 28: 54 },
+      '11': { 1: 79, 2: 71, 3: 69, 4: 59, 5: 50, 6: 74, 7: 81, 8: 91, 9: 92, 10: 95, 11: 106, 12: 106, 13: 117, 14: 129, 15: 119, 16: 133, 17: 143, 18: 60, 19: 54, 20: 30, 21: 31, 22: 20, 23: 4, 24: 0, 25: 50, 26: 67, 27: 72, 28: 84 },
+      'gakumu': { 1: 86, 2: 80, 3: 80, 4: 70, 5: 61, 6: 37, 7: 45, 8: 54, 9: 55, 10: 59, 11: 69, 12: 69, 13: 80, 14: 93, 15: 83, 16: 96, 17: 106, 18: 70, 19: 60, 20: 54, 21: 54, 22: 66, 23: 84, 24: 84, 25: 35, 26: 17, 27: 12, 28: 0 },
+      'free': { 1: 115, 2: 112, 3: 111, 4: 102, 5: 93, 6: 69, 7: 62, 8: 53, 9: 51, 10: 48, 11: 37, 12: 37, 13: 26, 14: 14, 15: 24, 16: 10, 17: 0, 18: 102, 19: 92, 20: 113, 21: 117, 22: 126, 23: 143, 24: 143, 25: 106, 26: 89, 27: 94, 28: 106 },
+    };
+
+    function pickMsg(room, value) {
+      const table = distRaw[room];
+      if (!table) return null;
+      const d = table[value];
+      if (d == null) return null;
+      if (d === 0) return "到着しました";
+      return `あと${d}m`;
+    }
+
+    function updateMsgHUD(room, value) {
+      const text = pickMsg(room, value);
+      if (!text) {
+        hudMsg.style.display = 'none';
+        hudMsg.textContent = '';
+        return;
+      }
+      hudMsg.textContent = text;
+      hudMsg.style.display = 'block';
+    }
+
+    // 階段/到着は “画面固定テキスト” で出す
+    function pickAction(room, value) {
+      const dir = (plan[room] || {})[value];
+      if (!dir) return null;
+
+      if (dir === '階段上' || dir === '階段') return '階段を上がってください';
+      if (dir === '階段下') return '階段を下りてください';
+      if (dir === '到着') return '到着しました';
+      return null;
+    }
+
+    function updateActionHUD(room, value) {
+      const text = pickAction(room, value);
+
+      if (!text) {
+        hudAction.style.display = 'none';
+        hudAction.textContent = '';
+        return;
+      }
+
+      // 階段/到着のときは距離HUDを隠す（邪魔なら）
+      hudMsg.style.display = 'none';
+      hudMsg.textContent = '';
+
+      hudAction.textContent = text;
+      hudAction.style.display = 'block';
+    }
+
+    /********************
+     * ★黒い棒（a-plane等）を “強制的に消す”
+     * マーカー直下の子要素を「矢印だけ」残して全削除
+     ********************/
+    function purgeMarkerKeepArrow(markerEl, arrowWrapId) {
+      const kids = Array.from(markerEl.children);
+      for (const child of kids) {
+        if (child.id !== arrowWrapId) markerEl.removeChild(child);
+      }
+    }
+
+    /********************
      * マーカーの生成（1..MAX_MARKER）
      ********************/
     const scene = document.querySelector('a-scene');
@@ -246,54 +306,43 @@
         marker.setAttribute('value', String(v));
         marker.setAttribute('id', `m${v}`);
 
-        // --- 矢印ノード（GLB） ---
+        // --- 矢印ノード（GLB）だけ作る ---
         const arrowWrap = document.createElement('a-entity');
         arrowWrap.setAttribute('id', `arrowWrap-${v}`);
+
         const arrowYaw = document.createElement('a-entity');
         arrowYaw.setAttribute('id', `arrowYaw-${v}`);
+
         const arrow = document.createElement('a-entity');
         arrow.setAttribute('gltf-model', '#arrowModel');
         arrow.setAttribute('fit-model-height', `target: ${ARROW_TARGET_H}`);
+
         arrowYaw.appendChild(arrow);
         arrowWrap.appendChild(arrowYaw);
-
-        // --- 階段ノード（PNGではなくテキスト看板） ---
-        const stairsGroup = document.createElement('a-entity');
-        stairsGroup.setAttribute('id', `stairsGroup-${v}`);
-        stairsGroup.setAttribute('position', `${STAIRS_GROUP_POS.x} ${STAIRS_GROUP_POS.y} ${STAIRS_GROUP_POS.z}`);
-
-        const stairsUp = makeTextSign(`stairsUp-${v}`, '階段を上がってください', STAIRS_TARGET_H);
-        const stairsDown = makeTextSign(`stairsDown-${v}`, '階段を下りてください', STAIRS_TARGET_H);
-
-        stairsGroup.appendChild(stairsUp);
-        stairsGroup.appendChild(stairsDown);
-
-        // --- 到着ノード（テキスト看板） ---
-        const arrivalGroup = document.createElement('a-entity');
-        arrivalGroup.setAttribute('id', `arrivalGroup-${v}`);
-        arrivalGroup.setAttribute('position', `${ARRIVAL_GROUP_POS.x} ${ARRIVAL_GROUP_POS.y} ${ARRIVAL_GROUP_POS.z}`);
-
-        const arrivalSign = makeTextSign(`arrival-${v}`, '到着しました', ARRIVAL_TARGET_H);
-        arrivalGroup.appendChild(arrivalSign);
-
-        // マーカーにぶら下げる
         marker.appendChild(arrowWrap);
-        marker.appendChild(stairsGroup);
-        marker.appendChild(arrivalGroup);
+
         scene.appendChild(marker);
 
-        // 検出イベント：表示適用＋メッセージ更新
         marker.addEventListener('markerFound', () => {
+          // ★古い/混入した3D（黒い棒など）を問答無用で消す
+          purgeMarkerKeepArrow(marker, `arrowWrap-${v}`);
+
           apply(v);
           updateMsgHUD(room, v);
+          updateActionHUD(room, v);
+        });
+
+        marker.addEventListener('markerLost', () => {
+          hudAction.style.display = 'none';
+          hudAction.textContent = '';
         });
       }
-      // 初期反映
+
       apply();
     });
 
     /********************
-     * 表示適用
+     * 表示適用（矢印だけ）
      ********************/
     function apply(foundValue) {
       const table = plan[room] || {};
@@ -303,35 +352,14 @@
       for (let v = loopFrom; v <= loopTo; v++) {
         const dir = table[v];
 
-        const arrowWrap   = document.getElementById(`arrowWrap-${v}`);
-        const arrowYaw    = document.getElementById(`arrowYaw-${v}`);
-        const stairsGroup = document.getElementById(`stairsGroup-${v}`);
-        const stairsUp    = document.getElementById(`stairsUp-${v}`);
-        const stairsDown  = document.getElementById(`stairsDown-${v}`);
-        const arrivalGroup= document.getElementById(`arrivalGroup-${v}`);
+        const arrowWrap = document.getElementById(`arrowWrap-${v}`);
+        const arrowYaw  = document.getElementById(`arrowYaw-${v}`);
 
-        // いったん全部非表示
-        if (arrowWrap)    arrowWrap.setAttribute('visible', false);
-        if (stairsGroup)  stairsGroup.setAttribute('visible', false);
-        if (stairsUp)     stairsUp.setAttribute('visible', false);
-        if (stairsDown)   stairsDown.setAttribute('visible', false);
-        if (arrivalGroup) arrivalGroup.setAttribute('visible', false);
-
+        if (arrowWrap) arrowWrap.setAttribute('visible', false);
         if (!dir) continue;
 
-        // 階段
-        if (dir === '階段' || dir === '階段上' || dir === '階段下') {
-          stairsGroup.setAttribute('visible', true);
-          if (dir === '階段下') stairsDown.setAttribute('visible', true);
-          else stairsUp.setAttribute('visible', true); // '階段' は上り扱い
-          continue;
-        }
-
-        // 到着（テキスト看板だけ出してHUDは消す）
-        if (dir === '到着') {
-          arrivalGroup.setAttribute('visible', true);
-          const hud = document.getElementById('hudMsg');
-          if (hud) { hud.style.display = 'none'; hud.textContent = ''; }
+        // 階段/到着は “HUDだけ” にして、AR空間には何も出さない
+        if (dir === '階段' || dir === '階段上' || dir === '階段下' || dir === '到着') {
           continue;
         }
 
@@ -343,58 +371,6 @@
           arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
         }
       }
-    }
-
-    const distRaw = {
-      '3': { 1: 11, 2: 0, 3: 0, 4: 11, 5: 19, 6: 42, 7: 50, 8: 59, 9: 61, 10: 63, 11: 74, 12: 74, 13: 85, 14: 98, 15: 87, 16: 101, 17: 111, 18: 11, 19: 20, 20: 39, 21: 43, 22: 52, 23: 69, 24: 69, 25: 59, 26: 62, 27: 67, 28: 80 },
-
-      '4': { 1: 20, 2: 11, 3: 13, 4: 4, 5: 10, 6: 33, 7: 40, 8: 49, 9: 51, 10: 55, 11: 65, 12: 65, 13: 76, 14: 88, 15: 78, 16: 92, 17: 102, 18: 0, 19: 10, 20: 30, 21: 34, 22: 42, 23: 60, 24: 60, 25: 49, 26: 53, 27: 58, 28: 70 },
-
-      '5': { 1: 27, 2: 20, 3: 22, 4: 11, 5: 4, 6: 23, 7: 30, 8: 39, 9: 41, 10: 44, 11: 55, 12: 54, 13: 66, 14: 78, 15: 68, 16: 82, 17: 92, 18: 10, 19: 0, 20: 24, 21: 28, 22: 37, 23: 54, 24: 54, 25: 44, 26: 43, 27: 48, 28: 60 },
-
-      '6': { 1: 54, 2: 50, 3: 50, 4: 40, 5: 31, 6: 8, 7: 0, 8: 9, 9: 12, 10: 16, 11: 26, 12: 25, 13: 36, 14: 49, 15: 39, 16: 52, 17: 62, 18: 40, 19: 30, 20: 51, 21: 55, 22: 64, 23: 81, 24: 81, 25: 46, 26: 28, 27: 33, 28: 45 },
-
-      '7': { 1: 63, 2: 59, 3: 59, 4: 50, 5: 41, 6: 17, 7: 9, 8: 0, 9: 4, 10: 9, 11: 17, 12: 16, 13: 27, 14: 39, 15: 29, 16: 43, 17: 53, 18: 49, 19: 39, 20: 61, 21: 65, 22: 73, 23: 91, 24: 91, 25: 55, 26: 37, 27: 42, 28: 54 },
-
-      '8': { 1: 65, 2: 60, 3: 60, 4: 50, 5: 41, 6: 18, 7: 11, 8: 4, 9: 1, 10: 6, 11: 15, 12: 14, 13: 25, 14: 38, 15: 28, 16: 42, 17: 51, 18: 50, 19: 40, 20: 61, 21: 65, 22: 74, 23: 92, 24: 92, 25: 55, 26: 38, 27: 43, 28: 55 },
-
-      '9': { 1: 79, 2: 71, 3: 69, 4: 59, 5: 50, 6: 74, 7: 81, 8: 91, 9: 92, 10: 95, 11: 106, 12: 106, 13: 117, 14: 129, 15: 119, 16: 133, 17: 143, 18: 60, 19: 54, 20: 30, 21: 31, 22: 19, 23: 0, 24: 4, 25: 50, 26: 68, 27: 72, 28: 84 },
-
-      '10': { 1: 53, 2: 45, 3: 43, 4: 33, 5: 24, 6: 48, 7: 55, 8: 65, 9: 66, 10: 69, 11: 80, 12: 80, 13: 91, 14: 103, 15: 93, 16: 107, 17: 117, 18: 34, 19: 28, 20: 4, 21: 0, 22: 12, 23: 31, 24: 31, 25: 20, 26: 37, 27: 42, 28: 54 },
-
-      '11': { 1: 79, 2: 71, 3: 69, 4: 59, 5: 50, 6: 74, 7: 81, 8: 91, 9: 92, 10: 95, 11: 106, 12: 106, 13: 117, 14: 129, 15: 119, 16: 133, 17: 143, 18: 60, 19: 54, 20: 30, 21: 31, 22: 20, 23: 4, 24: 0, 25: 50, 26: 67, 27: 72, 28: 84 },
-
-      'gakumu': { 1: 86, 2: 80, 3: 80, 4: 70, 5: 61, 6: 37, 7: 45, 8: 54, 9: 55, 10: 59, 11: 69, 12: 69, 13: 80, 14: 93, 15: 83, 16: 96, 17: 106, 18: 70, 19: 60, 20: 54, 21: 54, 22: 66, 23: 84, 24: 84, 25: 35, 26: 17, 27: 12, 28: 0 },
-
-      'free': { 1: 115, 2: 112, 3: 111, 4: 102, 5: 93, 6: 69, 7: 62, 8: 53, 9: 51, 10: 48, 11: 37, 12: 37, 13: 26, 14: 14, 15: 24, 16: 10, 17: 0, 18: 102, 19: 92, 20: 113, 21: 117, 22: 126, 23: 143, 24: 143, 25: 106, 26: 89, 27: 94, 28: 106 },
-    };
-
-    // HUD 要素
-    const hudMsg = document.getElementById('hudMsg');
-
-    // room と marker番号からメッセージ文字列を返す
-    function pickMsg(room, value) {
-      const table = distRaw[room];
-      if (!table) return null;
-
-      const d = table[value];
-      if (d == null) return null;
-
-      if (d === 0) return "到着しました";
-      return `あと${d}m`;
-    }
-
-    // HUD 更新
-    function updateMsgHUD(room, value) {
-      const text = pickMsg(room, value);
-
-      if (!text) {
-        hudMsg.style.display = 'none';
-        hudMsg.textContent = '';
-        return;
-      }
-      hudMsg.textContent = text;
-      hudMsg.style.display = 'block';
     }
   </script>
 </body>
