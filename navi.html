@@ -87,6 +87,11 @@
     const ARROW_TARGET_H   = 0.45; // 通常矢印の見かけ高さ(m)
     const ARROW_YAW_OFFSET = -90;  // 矢印GLBの前向き補正（モデルに合わせて調整）
 
+    // ★直進(forward)だけ「立体っぽく見える」角度/位置（ここを調整）
+    const FORWARD_PITCH = -25;   // 上下の傾き（逆なら +25）
+    const FORWARD_ROLL  = -12;   // ひねり（逆なら +12）
+    const FORWARD_POS   = { x: 0.00, y: 0.02, z: 0.95 }; // 壁から少し浮かせる
+
     // 壁マーカー向け：矢印を「壁から浮かせる」(m)
     const POS_MAP = {
       forward: { x:  0.00, y: 0.00, z: 0.90 },
@@ -96,29 +101,7 @@
       right45: { x:  0.25, y: 0.00, z: 0.95 },
       left45:  { x: -0.25, y: 0.00, z: 0.95 }
     };
-    const POS_DEFAULT = { x: 1, y: 1, z: 1 };
-
-    /********************
-     * ★マーカー2専用：向きをベクトルで定義（ローカル座標）
-     *  +x=右, +y=上, +z=カメラ側（壁から手前）
-     ********************/
-    const SPECIAL_DIR_VEC = {
-      1: { x: 0, y: 0, z: 6} // ←ここを自由に変えてOK
-    };
-
-    // 方向ベクトル -> rotation(度) に変換（yaw/pitch）
-    function vecToEulerDeg(v) {
-      const x = v.x, y = v.y, z = v.z;
-
-      // yaw: y軸回転
-      const yaw = Math.atan2(x, z) * 180 / Math.PI;
-
-      // pitch: x軸回転（上向きの符号調整込み）
-      const horiz = Math.sqrt(x*x + z*z) || 1e-6;
-      const pitch = -Math.atan2(y, horiz) * 180 / Math.PI;
-
-      return { pitch, yaw };
-    }
+    const POS_DEFAULT = { x: 0.00, y: 0.00, z: 0.75 };
 
     /********************
      * 自作コンポーネント
@@ -428,19 +411,18 @@
         arrowWrap.setAttribute('visible', true);
         arrowWrap.setAttribute('position', `${p.x} ${p.y} ${p.z}`);
 
-        // ★マーカー2だけ：ベクトル定義で向きを決める
-        if (v === 2 && SPECIAL_DIR_VEC[2]) {
-          const { pitch, yaw } = vecToEulerDeg(SPECIAL_DIR_VEC[2]);
-          const finalYaw = yaw + ARROW_YAW_OFFSET; // モデル補正も足す
-          arrowYaw.setAttribute('rotation', `${pitch} ${finalYaw} 0`);
-          continue;
-        }
-
-        // それ以外：従来どおり（yawMap）
+        // 回転（直進だけ pitch/roll を追加して立体っぽく）
         const baseYaw = yawMap[key];
         if (typeof baseYaw === 'number') {
           const yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
-          arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
+
+          if (key === 'forward') {
+            // ★直進だけ専用の位置・角度
+            arrowWrap.setAttribute('position', `${FORWARD_POS.x} ${FORWARD_POS.y} ${FORWARD_POS.z}`);
+            arrowYaw.setAttribute('rotation', `${FORWARD_PITCH} ${yaw} ${FORWARD_ROLL}`);
+          } else {
+            arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
+          }
         }
       }
     }
