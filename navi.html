@@ -294,6 +294,7 @@
       const text = pickAction(room, value);
       if (!text) return;
 
+      // 距離は隠す（指示が優先）
       hudMsg.style.display = 'none';
       hudMsg.textContent = '';
 
@@ -327,14 +328,20 @@
         const arrowWrap = document.createElement('a-entity');
         arrowWrap.setAttribute('id', `arrowWrap-${v}`);
 
+        // ★方向(yaw)用
         const arrowYaw = document.createElement('a-entity');
         arrowYaw.setAttribute('id', `arrowYaw-${v}`);
+
+        // ★立体感(pitch/roll)用（直進だけここを回す）
+        const arrowTilt = document.createElement('a-entity');
+        arrowTilt.setAttribute('id', `arrowTilt-${v}`);
 
         const arrow = document.createElement('a-entity');
         arrow.setAttribute('gltf-model', '#arrowModel');
         arrow.setAttribute('fit-model-height', `target: ${ARROW_TARGET_H}`);
 
-        arrowYaw.appendChild(arrow);
+        arrowTilt.appendChild(arrow);
+        arrowYaw.appendChild(arrowTilt);
         arrowWrap.appendChild(arrowYaw);
         marker.appendChild(arrowWrap);
 
@@ -390,12 +397,15 @@
 
         const arrowWrap = document.getElementById(`arrowWrap-${v}`);
         const arrowYaw  = document.getElementById(`arrowYaw-${v}`);
+        const arrowTilt = document.getElementById(`arrowTilt-${v}`);
 
         // いったん非表示＆位置リセット
         if (arrowWrap) {
           arrowWrap.setAttribute('visible', false);
           arrowWrap.setAttribute('position', `${POS_DEFAULT.x} ${POS_DEFAULT.y} ${POS_DEFAULT.z}`);
         }
+        if (arrowYaw)  arrowYaw.setAttribute('rotation', `0 0 0`);
+        if (arrowTilt) arrowTilt.setAttribute('rotation', `0 0 0`);
 
         if (!dir) continue;
 
@@ -411,17 +421,20 @@
         arrowWrap.setAttribute('visible', true);
         arrowWrap.setAttribute('position', `${p.x} ${p.y} ${p.z}`);
 
-        // 回転（直進だけ pitch/roll を追加して立体っぽく）
+        // 回転
         const baseYaw = yawMap[key];
         if (typeof baseYaw === 'number') {
           const yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
 
+          // ★yawはarrowYawで固定（方向担当）
+          arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
+
+          // ★直進だけtiltで立体感
           if (key === 'forward') {
-            // ★直進だけ専用の位置・角度
             arrowWrap.setAttribute('position', `${FORWARD_POS.x} ${FORWARD_POS.y} ${FORWARD_POS.z}`);
-            arrowYaw.setAttribute('rotation', `${FORWARD_PITCH} ${yaw} ${FORWARD_ROLL}`);
+            arrowTilt.setAttribute('rotation', `${FORWARD_PITCH} 0 ${FORWARD_ROLL}`);
           } else {
-            arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
+            arrowTilt.setAttribute('rotation', `0 0 0`);
           }
         }
       }
