@@ -431,7 +431,7 @@ if (typeof baseYaw === 'number') {
 
   // ★直進だけ先っぽを反対にしたいなら 180°回す
   if (key === 'forward') {
-    yaw = (yaw + 180) % 360;
+    yaw = (yaw - 180) % 360;
   }
 
   arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
