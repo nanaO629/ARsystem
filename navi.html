@@ -87,10 +87,10 @@
     const ARROW_TARGET_H   = 0.45; // 通常矢印の見かけ高さ(m)
     const ARROW_YAW_OFFSET = -90;  // 矢印GLBの前向き補正（モデルに合わせて調整）
 
-    // ★直進(forward)だけ「立体っぽく見える」角度/位置（ここを調整）
-    const FORWARD_PITCH = -25;   // 上下の傾き（逆なら +25）
-    const FORWARD_ROLL  = -12;   // ひねり（逆なら +12）
-    const FORWARD_POS   = { x: 0.00, y: 0.02, z: 0.95 }; // 壁から少し浮かせる
+ const FORWARD_PITCH = -10;   // 傾きを弱くする（下向き感が減る）
+const FORWARD_ROLL  = -18;   // 代わりにロールを効かせて「面」の立体感を出す
+const FORWARD_POS   = { x: 0.00, y: 0.10, z: 0.95 }; // 少し上に持ち上げる
+
 
     // 壁マーカー向け：矢印を「壁から浮かせる」(m)
     const POS_MAP = {
