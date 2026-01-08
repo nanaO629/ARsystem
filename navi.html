@@ -425,10 +425,26 @@ const FORWARD_POS   = { x: 0.00, y: 0.10, z: 1.00 }
         // 回転
         const baseYaw = yawMap[key];
         if (typeof baseYaw === 'number') {
-          const yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
+const baseYaw = yawMap[key];
+if (typeof baseYaw === 'number') {
+  let yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
 
-          // ★yawはarrowYawで固定（方向担当）
-          arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
+  // ★直進だけ先っぽを反対にしたいなら 180°回す
+  if (key === 'forward') {
+    yaw = (yaw + 180) % 360;
+  }
+
+  arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
+
+  // ★直進だけtiltで立体感
+  if (key === 'forward') {
+    arrowWrap.setAttribute('position', `${FORWARD_POS.x} ${FORWARD_POS.y} ${FORWARD_POS.z}`);
+    arrowTilt.setAttribute('rotation', `${FORWARD_PITCH} 0 ${FORWARD_ROLL}`);
+  } else {
+    arrowTilt.setAttribute('rotation', `0 0 0`);
+  }
+}
+
 
           // ★直進だけtiltで立体感
           if (key === 'forward') {
