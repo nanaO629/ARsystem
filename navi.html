@@ -87,6 +87,9 @@
     const ARROW_TARGET_H   = 0.45; // GLB矢印の見かけ高さ(m)
     const ARROW_YAW_OFFSET = -90;  // GLB矢印の前向き補正
 
+    // ★直進（cone/cylinder）色：arrow.glb に近い青
+    const FORWARD_COLOR = '#1050f0';
+
     // 直進（プリミティブ矢印）を見やすい位置に
     const FORWARD_POS = { x: 0.00, y: 0.25, z: 0.90 };
 
@@ -327,14 +330,6 @@
       hudAction.style.display = 'block';
     }
 
-    // 黒い棒対策：指定ID以外を強制削除
-    function purgeMarkerKeep(markerEl, keepId) {
-      const kids = Array.from(markerEl.children);
-      for (const child of kids) {
-        if (child.id !== keepId) markerEl.removeChild(child);
-      }
-    }
-
     let activeActionMarker = null;
     let actionHideTimer = null;
 
@@ -375,7 +370,7 @@
         fwdWrap.setAttribute('position', `${FORWARD_POS.x} ${FORWARD_POS.y} ${FORWARD_POS.z}`);
         fwdWrap.setAttribute('face-camera-yaw', 'offset: 0'); // 常に正面
 
-        // “立体感”を出すために少し傾ける（ここが超安定）
+        // “立体感”を出すために少し傾ける（安定）
         const fwdTilt = document.createElement('a-entity');
         fwdTilt.setAttribute('rotation', `-35 0 0`); // 好みで調整
 
@@ -383,14 +378,18 @@
         cone.setAttribute('radius-bottom', '0.18');
         cone.setAttribute('radius-top', '0.0');
         cone.setAttribute('height', '0.35');
-        cone.setAttribute('color', '#00ff66');
+        cone.setAttribute('color', FORWARD_COLOR);
+        // 質感寄せ（任意）
+        cone.setAttribute('material', `color: ${FORWARD_COLOR}; metalness: 0.2; roughness: 0.35;`);
         cone.setAttribute('position', '0 0.20 0');
         cone.setAttribute('rotation', '0 0 0');
 
         const cyl = document.createElement('a-cylinder');
         cyl.setAttribute('radius', '0.07');
         cyl.setAttribute('height', '0.45');
-        cyl.setAttribute('color', '#00ff66');
+        cyl.setAttribute('color', FORWARD_COLOR);
+        // 質感寄せ（任意）
+        cyl.setAttribute('material', `color: ${FORWARD_COLOR}; metalness: 0.2; roughness: 0.35;`);
         cyl.setAttribute('position', '0 0 0');
         cyl.setAttribute('rotation', '0 0 0');
 
