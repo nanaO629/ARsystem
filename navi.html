@@ -451,7 +451,8 @@
         const baseYaw = yawMap[key];
         if (typeof baseYaw === 'number') {
           const yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
-          arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
+          arrowYaw.setAttribute('rotation', '0 0 0');
+
         }
       }
     }
