@@ -439,7 +439,7 @@
         if (key === 'forward') {
           // offset は「モデルの前向き補正 + 先っぽ反転(必要なら)」
           // 先っぽが奥向きなら +180 を入れる。逆なら +180 を消す。
-          arrowYaw.setAttribute('face-camera-yaw', `offset: ${ARROW_YAW_OFFSET}`);
+          arrowYaw.setAttribute('face-camera-yaw', `offset: ${ARROW_YAW_OFFSET + 180}`);
 
           // 立体感（pitch/roll）は別ノードで
           arrowTilt.setAttribute('rotation', `${FORWARD_PITCH} 0 ${FORWARD_ROLL}`);
