@@ -85,13 +85,21 @@
      * 表示パラメータ
      ********************/
     const ARROW_TARGET_H   = 0.45; // 通常矢印の見かけ高さ(m)
-    const ARROW_YAW_OFFSET = -90;  // 矢印GLBの前向き補正（モデルに合わせて調整）
+
+    // ★モデルの「素の向き」が下(-Y)だったので、まず「カメラ方向(+Z)」に起こす
+    //   下(-Y) -> +Z にするには -90。逆向きなら +90 に変える。
+    const ARROW_BASE_PITCH = -90;
+
+    // 従来のヨー補正（必要なら残す / ずれてたら 0 にしてみて）
+    const ARROW_YAW_OFFSET = -90;
 
     // ★直進(forward)だけ：マーカーの「下」じゃなく「中央〜少し上」に出す（誤解防止）
-    //   + 立体感（奥行き）を強めに付ける
-    const FORWARD_PITCH = -55;     // ★奥行き感（強め）
-    const FORWARD_ROLL  = -18;     // ★斜め感（少し）
     const FORWARD_POS   = { x: 0.00, y: 0.28, z: 0.95 }; // ★位置を上げる
+
+    // ★直進だけ：立体感用（方向は face-camera-yaw に任せて、ここでは見た目だけ傾ける）
+    //   まずはこのくらいが「厚みが見える」ことが多い。好みで調整OK。
+    const FORWARD_EXTRA_PITCH = -18;  // 0〜-25くらい
+    const FORWARD_EXTRA_ROLL  = -18;  // 0〜-30くらい
 
     // 壁マーカー向け：矢印を「壁から浮かせる」(m)
     const POS_MAP = {
@@ -336,7 +344,12 @@
         const arrowYaw = document.createElement('a-entity');
         arrowYaw.setAttribute('id', `arrowYaw-${v}`);
 
-        // ★立体感(pitch/roll)用（直進だけここを回す）
+        // ★モデルの素向き補正（下向き→カメラ方向へ）
+        const arrowBase = document.createElement('a-entity');
+        arrowBase.setAttribute('id', `arrowBase-${v}`);
+        arrowBase.setAttribute('rotation', `${ARROW_BASE_PITCH} 0 0`);
+
+        // ★見た目の傾き（pitch/roll）用
         const arrowTilt = document.createElement('a-entity');
         arrowTilt.setAttribute('id', `arrowTilt-${v}`);
 
@@ -345,7 +358,8 @@
         arrow.setAttribute('fit-model-height', `target: ${ARROW_TARGET_H}`);
 
         arrowTilt.appendChild(arrow);
-        arrowYaw.appendChild(arrowTilt);
+        arrowBase.appendChild(arrowTilt);
+        arrowYaw.appendChild(arrowBase);
         arrowWrap.appendChild(arrowYaw);
         marker.appendChild(arrowWrap);
 
@@ -401,6 +415,7 @@
 
         const arrowWrap = document.getElementById(`arrowWrap-${v}`);
         const arrowYaw  = document.getElementById(`arrowYaw-${v}`);
+        const arrowBase = document.getElementById(`arrowBase-${v}`);
         const arrowTilt = document.getElementById(`arrowTilt-${v}`);
 
         // いったん非表示＆位置リセット
@@ -412,7 +427,13 @@
           arrowYaw.removeAttribute('face-camera-yaw');
           arrowYaw.setAttribute('rotation', `0 0 0`);
         }
-        if (arrowTilt) arrowTilt.setAttribute('rotation', `0 0 0`);
+        if (arrowBase) {
+          // いつでも素向きを固定
+          arrowBase.setAttribute('rotation', `${ARROW_BASE_PITCH} 0 0`);
+        }
+        if (arrowTilt) {
+          arrowTilt.setAttribute('rotation', `0 0 0`);
+        }
 
         if (!dir) continue;
 
@@ -435,15 +456,12 @@
         }
 
         // 回転
-        // ★直進だけ：先っぽが「自分側」を向く（+180は付けない）
         if (key === 'forward') {
+          // ★直進：常に自分(カメラ)側へ先っぽが向く（＝反対側へ行け！の意味を作る）
           arrowYaw.setAttribute('face-camera-yaw', `offset: ${ARROW_YAW_OFFSET}`);
 
-          // ★立体感（奥行き・斜め）を付ける
-          // 下っぽく見える場合は、FORWARD_ROLL に +180 して切り替え
-          arrowTilt.setAttribute('rotation', `${FORWARD_PITCH} 0 ${FORWARD_ROLL}`);
-          // arrowTilt.setAttribute('rotation', `${FORWARD_PITCH} 0 ${FORWARD_ROLL + 180}`);
-
+          // ★立体感だけ足す（方向は変えない範囲で）
+          arrowTilt.setAttribute('rotation', `${FORWARD_EXTRA_PITCH} 0 ${FORWARD_EXTRA_ROLL}`);
           continue;
         }
 
@@ -451,8 +469,7 @@
         const baseYaw = yawMap[key];
         if (typeof baseYaw === 'number') {
           const yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
-          arrowYaw.setAttribute('rotation', '0 0 0');
-
+          arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
         }
       }
     }
