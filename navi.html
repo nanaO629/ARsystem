@@ -87,12 +87,10 @@
     const ARROW_TARGET_H   = 0.45; // 通常矢印の見かけ高さ(m)
     const ARROW_YAW_OFFSET = -90;  // 矢印GLBの前向き補正（モデルに合わせて調整）
 
-    // ★直進(forward)だけ：マーカーの「下」じゃなく「中央〜少し上」に出す（誤解防止）
-    //   + 立体感（奥行き）を強めに付ける
-    //   ※ pitch/roll の符号はモデルの軸次第で逆になるので、違ったら符号を反転してOK
+    // ★直進(forward)だけ：中央〜少し上 + 立体感を強め
     const FORWARD_PITCH = -55;     // ★奥行き感（強め）
     const FORWARD_ROLL  = -18;     // ★斜め感（少し）
-    const FORWARD_POS   = { x: 0.00, y: 0.28, z: 0.95 }; // ★位置を上げる
+    const FORWARD_POS   = { x: 0.00, y: 0.28, z: 0.95 };
 
     // 壁マーカー向け：矢印を「壁から浮かせる」(m)
     const POS_MAP = {
@@ -143,9 +141,8 @@
       }
     });
 
-    // ★マーカーの表裏（カメラが表側か裏側か）を判定して、
-    //   必要なら Y を 180° 反転して「見えてる側に矢印の先っぽ」を向けやすくする
-    //   ※ markerの表法線を (0,0,1) としているので、もし逆なら (0,0,-1) に変えてOK
+    // ★マーカーの表裏を判定して、必要なら Y を 180° 反転
+    //   ※ もし逆なら normal の (0,0,1) を (0,0,-1) に変えてOK
     AFRAME.registerComponent('flip-to-camera-side', {
       schema: { marker: { type: 'selector' } },
       tick() {
@@ -162,20 +159,20 @@
 
         const toCam = camPos.sub(markerPos).normalize();
 
-        // マーカーの「表側法線」（ローカル +Z を表としてみる）
         const q = new THREE.Quaternion();
         markerEl.object3D.getWorldQuaternion(q);
+
         const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(q).normalize();
-
-        const dot = normal.dot(toCam); // >0: 表から / <0: 裏から
-
+        const dot = normal.dot(toCam); // >0: 表 / <0: 裏
         const flipDeg = (dot < 0) ? 180 : 0;
-        this.el.object3D.rotation.y = THREE.MathUtils.degToRad(flipDeg);
+
+        // ★Three.MathUtils 非依存で安全に回す
+        this.el.setAttribute('rotation', `0 ${flipDeg} 0`);
       }
     });
 
     /********************
-     * 方向の正規化 + 矢印角度（従来）
+     * 方向の正規化 + 矢印角度
      ********************/
     const CANON = {
       '直進':'forward', 'up':'forward',
@@ -439,6 +436,7 @@
 
         const arrowWrap = document.getElementById(`arrowWrap-${v}`);
         const arrowYaw  = document.getElementById(`arrowYaw-${v}`);
+        const arrowFace = document.getElementById(`arrowFace-${v}`);
         const arrowTilt = document.getElementById(`arrowTilt-${v}`);
 
         // いったん非表示＆位置リセット
@@ -449,6 +447,9 @@
         if (arrowYaw) {
           arrowYaw.removeAttribute('face-camera-yaw');
           arrowYaw.setAttribute('rotation', `0 0 0`);
+        }
+        if (arrowFace) {
+          arrowFace.setAttribute('rotation', `0 0 0`);
         }
         if (arrowTilt) arrowTilt.setAttribute('rotation', `0 0 0`);
 
@@ -473,8 +474,8 @@
         }
 
         // 回転
-        // ★直進だけ：先っぽが「自分側」を向く（face-camera-yaw で常にこちら向き）
         if (key === 'forward') {
+          // ★直進：こちらを向く + tiltで立体感
           arrowYaw.setAttribute('face-camera-yaw', `offset: ${ARROW_YAW_OFFSET}`);
           arrowTilt.setAttribute('rotation', `${FORWARD_PITCH} 0 ${FORWARD_ROLL}`);
           continue;
@@ -484,7 +485,6 @@
         const baseYaw = yawMap[key];
         if (typeof baseYaw === 'number') {
           const yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
-          // ★ここがバグってたので修正：計算したyawをちゃんと適用する
           arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
         }
       }
