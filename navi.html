@@ -69,6 +69,11 @@
       <a-asset-item id="arrowModel" src="arrow.glb"></a-asset-item>
     </a-assets>
 
+    <!-- ★陰影を出して立体感UP（ライト追加） -->
+    <a-entity light="type: ambient; intensity: 0.9"></a-entity>
+    <a-entity light="type: directional; intensity: 0.9" position="0 1 1"></a-entity>
+    <a-entity light="type: directional; intensity: 0.6" position="0 1 -1"></a-entity>
+
     <a-entity camera></a-entity>
   </a-scene>
 
@@ -85,21 +90,13 @@
      * 表示パラメータ
      ********************/
     const ARROW_TARGET_H   = 0.45; // 通常矢印の見かけ高さ(m)
+    const ARROW_YAW_OFFSET = -90;  // 矢印GLBの前向き補正（モデルに合わせて調整）
 
-    // ★モデルの「素の向き」が下(-Y)だったので、まず「カメラ方向(+Z)」に起こす
-    //   下(-Y) -> +Z にするには -90。逆向きなら +90 に変える。
-    const ARROW_BASE_PITCH = -90;
-
-    // 従来のヨー補正（必要なら残す / ずれてたら 0 にしてみて）
-    const ARROW_YAW_OFFSET = -90;
-
-    // ★直進(forward)だけ：マーカーの「下」じゃなく「中央〜少し上」に出す（誤解防止）
-    const FORWARD_POS   = { x: 0.00, y: 0.28, z: 0.95 }; // ★位置を上げる
-
-    // ★直進だけ：立体感用（方向は face-camera-yaw に任せて、ここでは見た目だけ傾ける）
-    //   まずはこのくらいが「厚みが見える」ことが多い。好みで調整OK。
-    const FORWARD_EXTRA_PITCH = -18;  // 0〜-25くらい
-    const FORWARD_EXTRA_ROLL  = -18;  // 0〜-30くらい
+    // ★直進(forward)だけ：立体感が出やすい角度
+    //   ※「強くしたのに立体に見えない」場合は符号が逆なことが多い
+    const FORWARD_PITCH = 28;      // ★立体感（まずは +28 で試す）
+    const FORWARD_ROLL  = 0;       // ★まずは0で安定させる
+    const FORWARD_POS   = { x: 0.00, y: 0.28, z: 0.95 }; // ★位置を上げる（下矢印誤解を減らす）
 
     // 壁マーカー向け：矢印を「壁から浮かせる」(m)
     const POS_MAP = {
@@ -132,7 +129,7 @@
       }
     });
 
-    // ★Y軸だけカメラへ正対させる（直進だけ使う）
+    // ★Y軸だけカメラへ正対（forwardだけ使う）
     AFRAME.registerComponent('face-camera-yaw', {
       schema: { offset: { type: 'number', default: 0 } },
       tick() {
@@ -232,7 +229,7 @@
         [9,'左'], [7,'直進'], [10,'左斜め'], [8,'左'], ['21-22','右'], ['25-27','左'],[20,'左'],[24,'直進']
       ],
       '10': [
-         ['5-6','階段上'], ['8-9','左'], [10,'左斜め'], [7,'うしろ'],['2-3','直進'],
+        ['5-6','階段上'], ['8-9','左'], [10,'左斜め'], [7,'うしろ'],['2-3','直進'],
         ['11-17','左'], ['22-24','右'], [20,'下'], ['25-27','左'], [21,'到着']
       ],
       '11': [
@@ -340,16 +337,11 @@
         const arrowWrap = document.createElement('a-entity');
         arrowWrap.setAttribute('id', `arrowWrap-${v}`);
 
-        // ★方向(yaw)用
+        // 方向(yaw)用
         const arrowYaw = document.createElement('a-entity');
         arrowYaw.setAttribute('id', `arrowYaw-${v}`);
 
-        // ★モデルの素向き補正（下向き→カメラ方向へ）
-        const arrowBase = document.createElement('a-entity');
-        arrowBase.setAttribute('id', `arrowBase-${v}`);
-        arrowBase.setAttribute('rotation', `${ARROW_BASE_PITCH} 0 0`);
-
-        // ★見た目の傾き（pitch/roll）用
+        // 立体感(pitch/roll)用（forwardだけここを回す）
         const arrowTilt = document.createElement('a-entity');
         arrowTilt.setAttribute('id', `arrowTilt-${v}`);
 
@@ -358,15 +350,14 @@
         arrow.setAttribute('fit-model-height', `target: ${ARROW_TARGET_H}`);
 
         arrowTilt.appendChild(arrow);
-        arrowBase.appendChild(arrowTilt);
-        arrowYaw.appendChild(arrowBase);
+        arrowYaw.appendChild(arrowTilt);
         arrowWrap.appendChild(arrowYaw);
         marker.appendChild(arrowWrap);
 
         scene.appendChild(marker);
 
         marker.addEventListener('markerFound', () => {
-          // ★黒い棒掃除（arrowWrapだけ残す）
+          // 黒い棒掃除（arrowWrapだけ残す）
           purgeMarkerKeep(marker, `arrowWrap-${v}`);
 
           if (actionHideTimer) { clearTimeout(actionHideTimer); actionHideTimer = null; }
@@ -415,10 +406,9 @@
 
         const arrowWrap = document.getElementById(`arrowWrap-${v}`);
         const arrowYaw  = document.getElementById(`arrowYaw-${v}`);
-        const arrowBase = document.getElementById(`arrowBase-${v}`);
         const arrowTilt = document.getElementById(`arrowTilt-${v}`);
 
-        // いったん非表示＆位置リセット
+        // いったん非表示＆位置/回転リセット
         if (arrowWrap) {
           arrowWrap.setAttribute('visible', false);
           arrowWrap.setAttribute('position', `${POS_DEFAULT.x} ${POS_DEFAULT.y} ${POS_DEFAULT.z}`);
@@ -427,13 +417,7 @@
           arrowYaw.removeAttribute('face-camera-yaw');
           arrowYaw.setAttribute('rotation', `0 0 0`);
         }
-        if (arrowBase) {
-          // いつでも素向きを固定
-          arrowBase.setAttribute('rotation', `${ARROW_BASE_PITCH} 0 0`);
-        }
-        if (arrowTilt) {
-          arrowTilt.setAttribute('rotation', `0 0 0`);
-        }
+        if (arrowTilt) arrowTilt.setAttribute('rotation', `0 0 0`);
 
         if (!dir) continue;
 
@@ -447,7 +431,7 @@
         // 表示
         arrowWrap.setAttribute('visible', true);
 
-        // 位置（直進だけ専用）
+        // 位置（forwardだけ専用）
         if (key === 'forward') {
           arrowWrap.setAttribute('position', `${FORWARD_POS.x} ${FORWARD_POS.y} ${FORWARD_POS.z}`);
         } else {
@@ -455,20 +439,20 @@
           arrowWrap.setAttribute('position', `${p.x} ${p.y} ${p.z}`);
         }
 
-        // 回転
-        if (key === 'forward') {
-          // ★直進：常に自分(カメラ)側へ先っぽが向く（＝反対側へ行け！の意味を作る）
-          arrowYaw.setAttribute('face-camera-yaw', `offset: ${ARROW_YAW_OFFSET}`);
+        // ===== 回転 =====
 
-          // ★立体感だけ足す（方向は変えない範囲で）
-          arrowTilt.setAttribute('rotation', `${FORWARD_EXTRA_PITCH} 0 ${FORWARD_EXTRA_ROLL}`);
+        // forward：先っぽを「自分側」に向けつつ、pitchで立体感
+        if (key === 'forward') {
+          arrowYaw.setAttribute('face-camera-yaw', `offset: ${ARROW_YAW_OFFSET}`);
+          arrowTilt.setAttribute('rotation', `${FORWARD_PITCH} 0 ${FORWARD_ROLL}`);
           continue;
         }
 
-        // ★それ以外：従来どおり（yawMap）
+        // それ以外：従来どおり（yawMap）
         const baseYaw = yawMap[key];
         if (typeof baseYaw === 'number') {
           const yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
+          // ★ここが前にバグってた：ちゃんと yaw を入れる
           arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
         }
       }
