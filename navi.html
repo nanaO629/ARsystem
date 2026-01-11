@@ -87,11 +87,11 @@
     const ARROW_TARGET_H   = 0.45; // 通常矢印の見かけ高さ(m)
     const ARROW_YAW_OFFSET = -90;  // 矢印GLBの前向き補正（モデルに合わせて調整）
 
-    // ★直進(forward)だけ「立体っぽく見える」角度/位置（ここを調整）
-    // 画像の「自分側に先っぽ」を優先するので、yawはカメラ向き（face-camera）で制御する
-    const FORWARD_PITCH = -15;
-    const FORWARD_ROLL  = -28;
-    const FORWARD_POS   = { x: 0.00, y: 0.10, z: 1.00 };
+    // ★直進(forward)だけ：マーカーの「下」じゃなく「中央〜少し上」に出す（誤解防止）
+    //   + 立体感（奥行き）を強めに付ける
+    const FORWARD_PITCH = -55;     // ★奥行き感（強め）
+    const FORWARD_ROLL  = -18;     // ★斜め感（少し）
+    const FORWARD_POS   = { x: 0.00, y: 0.28, z: 0.95 }; // ★位置を上げる
 
     // 壁マーカー向け：矢印を「壁から浮かせる」(m)
     const POS_MAP = {
@@ -435,14 +435,15 @@
         }
 
         // 回転
-        // ★直進だけ：矢印の先っぽが「自分側」を向くようにカメラ正対（yawMapは使わない）
+        // ★直進だけ：先っぽが「自分側」を向く（+180は付けない）
         if (key === 'forward') {
-          // offset は「モデルの前向き補正 + 先っぽ反転(必要なら)」
-          // 先っぽが奥向きなら +180 を入れる。逆なら +180 を消す。
-          arrowYaw.setAttribute('face-camera-yaw', `offset: ${ARROW_YAW_OFFSET }`);
+          arrowYaw.setAttribute('face-camera-yaw', `offset: ${ARROW_YAW_OFFSET}`);
 
-          // 立体感（pitch/roll）は別ノードで
+          // ★立体感（奥行き・斜め）を付ける
+          // 下っぽく見える場合は、FORWARD_ROLL に +180 して切り替え
           arrowTilt.setAttribute('rotation', `${FORWARD_PITCH} 0 ${FORWARD_ROLL}`);
+          // arrowTilt.setAttribute('rotation', `${FORWARD_PITCH} 0 ${FORWARD_ROLL + 180}`);
+
           continue;
         }
 
