@@ -87,6 +87,9 @@
     const ARROW_TARGET_H   = 0.45; // GLB矢印の見かけ高さ(m)
     const ARROW_YAW_OFFSET = -90;  // GLB矢印の前向き補正
 
+    // ★直進（cone/cylinder）色：arrow.glb に近い青
+    const FORWARD_COLOR = '#1050f0';
+
     // 直進（プリミティブ矢印）を見やすい位置に
     const FORWARD_POS = { x: 0.00, y: 0.25, z: 0.90 };
 
@@ -121,7 +124,7 @@
       }
     });
 
-    // Yawだけカメラへ正対
+    // Yawだけカメラへ正対（直進プリミティブ用）
     AFRAME.registerComponent('face-camera-yaw', {
       schema: { offset: { type: 'number', default: 0 } },
       tick() {
@@ -136,34 +139,6 @@
 
         const yaw = Math.atan2(dx, dz) * 180 / Math.PI + this.data.offset;
         this.el.setAttribute('rotation', `0 ${yaw} 0`);
-      }
-    });
-
-    // マーカーの表裏を判定して必要ならYを180°反転
-    AFRAME.registerComponent('flip-to-camera-side', {
-      schema: { marker: { type: 'selector' } },
-      tick() {
-        const markerEl = this.data.marker;
-        const scene = this.el.sceneEl;
-        const cam = scene && scene.camera;
-        if (!markerEl || !cam) return;
-        if (!markerEl.object3D.visible) return;
-
-        const markerPos = new THREE.Vector3();
-        const camPos = new THREE.Vector3();
-        markerEl.object3D.getWorldPosition(markerPos);
-        cam.getWorldPosition(camPos);
-
-        const toCam = camPos.sub(markerPos).normalize();
-
-        const q = new THREE.Quaternion();
-        markerEl.object3D.getWorldQuaternion(q);
-
-        const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(q).normalize();
-        const dot = normal.dot(toCam); // >0: 表 / <0: 裏
-        const flipDeg = (dot < 0) ? 180 : 0;
-
-        this.el.setAttribute('rotation', `0 ${flipDeg} 0`);
       }
     });
 
@@ -327,14 +302,6 @@
       hudAction.style.display = 'block';
     }
 
-    // 黒い棒対策：指定ID以外を強制削除
-    function purgeMarkerKeep(markerEl, keepId) {
-      const kids = Array.from(markerEl.children);
-      for (const child of kids) {
-        if (child.id !== keepId) markerEl.removeChild(child);
-      }
-    }
-
     let activeActionMarker = null;
     let actionHideTimer = null;
 
@@ -356,16 +323,11 @@
         const arrowYaw = document.createElement('a-entity');
         arrowYaw.setAttribute('id', `arrowYaw-${v}`);
 
-        const arrowFace = document.createElement('a-entity');
-        arrowFace.setAttribute('id', `arrowFace-${v}`);
-        arrowFace.setAttribute('flip-to-camera-side', `marker: #m${v}`);
-
         const arrow = document.createElement('a-entity');
         arrow.setAttribute('gltf-model', '#arrowModel');
         arrow.setAttribute('fit-model-height', `target: ${ARROW_TARGET_H}`);
 
-        arrowFace.appendChild(arrow);
-        arrowYaw.appendChild(arrowFace);
+        arrowYaw.appendChild(arrow);
         arrowWrap.appendChild(arrowYaw);
 
         // ===== 直進用：先輩方式のプリミティブ矢印 =====
@@ -375,7 +337,7 @@
         fwdWrap.setAttribute('position', `${FORWARD_POS.x} ${FORWARD_POS.y} ${FORWARD_POS.z}`);
         fwdWrap.setAttribute('face-camera-yaw', 'offset: 0'); // 常に正面
 
-        // “立体感”を出すために少し傾ける（ここが超安定）
+        // “立体感”を出すために少し傾ける（安定）
         const fwdTilt = document.createElement('a-entity');
         fwdTilt.setAttribute('rotation', `-35 0 0`); // 好みで調整
 
@@ -383,14 +345,16 @@
         cone.setAttribute('radius-bottom', '0.18');
         cone.setAttribute('radius-top', '0.0');
         cone.setAttribute('height', '0.35');
-        cone.setAttribute('color', '#00ff66');
+        cone.setAttribute('color', FORWARD_COLOR);
+        cone.setAttribute('material', `color: ${FORWARD_COLOR}; metalness: 0.2; roughness: 0.35;`);
         cone.setAttribute('position', '0 0.20 0');
         cone.setAttribute('rotation', '0 0 0');
 
         const cyl = document.createElement('a-cylinder');
         cyl.setAttribute('radius', '0.07');
         cyl.setAttribute('height', '0.45');
-        cyl.setAttribute('color', '#00ff66');
+        cyl.setAttribute('color', FORWARD_COLOR);
+        cyl.setAttribute('material', `color: ${FORWARD_COLOR}; metalness: 0.2; roughness: 0.35;`);
         cyl.setAttribute('position', '0 0 0');
         cyl.setAttribute('rotation', '0 0 0');
 
@@ -457,7 +421,6 @@
 
         const arrowWrap = document.getElementById(`arrowWrap-${v}`);
         const arrowYaw  = document.getElementById(`arrowYaw-${v}`);
-        const arrowFace = document.getElementById(`arrowFace-${v}`);
         const fwdWrap   = document.getElementById(`fwdWrap-${v}`);
 
         // 全部消す
@@ -466,11 +429,7 @@
 
         // リセット
         if (arrowWrap) arrowWrap.setAttribute('position', `${POS_DEFAULT.x} ${POS_DEFAULT.y} ${POS_DEFAULT.z}`);
-        if (arrowYaw) {
-          arrowYaw.removeAttribute('face-camera-yaw');
-          arrowYaw.setAttribute('rotation', `0 0 0`);
-        }
-        if (arrowFace) arrowFace.setAttribute('rotation', `0 0 0`);
+        if (arrowYaw)  arrowYaw.setAttribute('rotation', `0 0 0`);
 
         if (!dir) continue;
 
