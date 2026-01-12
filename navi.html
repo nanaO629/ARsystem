@@ -84,7 +84,8 @@
     /********************
      * 表示パラメータ
      ********************/
-    const ARROW_TARGET_H   = 0.45; // GLB矢印の見かけ高さ(m)
+    // ★GLB矢印：少し小さく
+    const ARROW_TARGET_H   = 0.35; // ← 0.45 から小さめに
     const ARROW_YAW_OFFSET = -90;  // GLB矢印の前向き補正
 
     // ★直進（cone/cylinder）色：arrow.glb に近い青
@@ -192,6 +193,9 @@
       return out;
     }
 
+    /********************
+     * ルート定義（既存）
+     ********************/
     const plan = buildPlan({
       '3': [
         [1,'右'], [2,'到着'], [3,'到着'],
@@ -234,9 +238,20 @@
       'free': [
         ['1-4','右'], ['5-6','階段上'], [8,'左'], [6,'階段上'], ['20-26','右'], [27,'下'],
         ['11-17','左'], [10,'左斜め'], [28,'到着']
-      ]
+      ],
+      'gakumu': [
+        // ※必要なら後で追加
+      ],
+
+      '1': [], '2': [], '12': [], '13': [],
+      'exp1': [], 'exp2': [], 'exp4': [],
+      'arch': [], 
+      'iotlab': [['1,3,6,7,10,11,14,26-30,41-45,50','右'],['5,13,17,19,21,23,33,35,36,38,46-49,52,55','左']]
     });
 
+    /********************
+     * room の決定
+     ********************/
     const room = new URLSearchParams(location.search).get('room') || '3';
 
     /********************
@@ -246,7 +261,7 @@
     const hudAction = document.getElementById('hudAction');
 
     /********************
-     * 距離データ
+     * 距離データ（既存）
      ********************/
     const distRaw = {
       '3': { 1: 11, 2: 0, 3: 0, 4: 11, 5: 19, 6: 42, 7: 50, 8: 59, 9: 61, 10: 63, 11: 74, 12: 74, 13: 85, 14: 98, 15: 87, 16: 101, 17: 111, 18: 11, 19: 20, 20: 39, 21: 43, 22: 52, 23: 69, 24: 69, 25: 59, 26: 62, 27: 67, 28: 80 },
@@ -260,6 +275,11 @@
       '11': { 1: 79, 2: 71, 3: 69, 4: 59, 5: 50, 6: 74, 7: 81, 8: 91, 9: 92, 10: 95, 11: 106, 12: 106, 13: 117, 14: 129, 15: 119, 16: 133, 17: 143, 18: 60, 19: 54, 20: 30, 21: 31, 22: 20, 23: 4, 24: 0, 25: 50, 26: 67, 27: 72, 28: 84 },
       'gakumu': { 1: 86, 2: 80, 3: 80, 4: 70, 5: 61, 6: 37, 7: 45, 8: 54, 9: 55, 10: 59, 11: 69, 12: 69, 13: 80, 14: 93, 15: 83, 16: 96, 17: 106, 18: 70, 19: 60, 20: 54, 21: 54, 22: 66, 23: 84, 24: 84, 25: 35, 26: 17, 27: 12, 28: 0 },
       'free': { 1: 115, 2: 112, 3: 111, 4: 102, 5: 93, 6: 69, 7: 62, 8: 53, 9: 51, 10: 48, 11: 37, 12: 37, 13: 26, 14: 14, 15: 24, 16: 10, 17: 0, 18: 102, 19: 92, 20: 113, 21: 117, 22: 126, 23: 143, 24: 143, 25: 106, 26: 89, 27: 94, 28: 106 },
+
+      // ★追加した目的地（距離未登録）
+      '1': {}, '2': {}, '12': {}, '13': {},
+      'exp1': {}, 'exp2': {}, 'exp4': {},
+      'arch': {}, 'iotlab': {}
     };
 
     function pickMsg(room, value) {
@@ -291,6 +311,15 @@
       return null;
     }
 
+    function showUnregisteredIfNeeded() {
+      const hasPlan = plan[room] && Object.keys(plan[room]).length > 0;
+      if (hasPlan) return;
+      hudMsg.style.display = 'none';
+      hudMsg.textContent = '';
+      hudAction.textContent = 'この目的地はルート未登録です';
+      hudAction.style.display = 'block';
+    }
+
     function updateActionHUD(room, value) {
       const text = pickAction(room, value);
       if (!text) return;
@@ -310,6 +339,8 @@
      ********************/
     const scene = document.querySelector('a-scene');
     scene.addEventListener('loaded', () => {
+      showUnregisteredIfNeeded();
+
       for (let v = 1; v <= MAX_MARKER; v++) {
         const marker = document.createElement('a-marker');
         marker.setAttribute('type', 'barcode');
@@ -330,39 +361,33 @@
         arrowYaw.appendChild(arrow);
         arrowWrap.appendChild(arrowYaw);
 
-        // ===== 直進用：先輩方式のプリミティブ矢印 =====
+        // ===== 直進用：プリミティブ矢印 =====
         const fwdWrap = document.createElement('a-entity');
         fwdWrap.setAttribute('id', `fwdWrap-${v}`);
         fwdWrap.setAttribute('visible', false);
         fwdWrap.setAttribute('position', `${FORWARD_POS.x} ${FORWARD_POS.y} ${FORWARD_POS.z}`);
-        fwdWrap.setAttribute('face-camera-yaw', 'offset: 0'); // 常に正面
+        fwdWrap.setAttribute('face-camera-yaw', 'offset: 0');
 
-        // “立体感”を出すために少し傾ける（安定）
         const fwdTilt = document.createElement('a-entity');
-        fwdTilt.setAttribute('rotation', `-35 0 0`); // 好みで調整
+        fwdTilt.setAttribute('rotation', `-35 0 0`);
 
         const cone = document.createElement('a-cone');
         cone.setAttribute('radius-bottom', '0.18');
         cone.setAttribute('radius-top', '0.0');
         cone.setAttribute('height', '0.35');
-        cone.setAttribute('color', FORWARD_COLOR);
         cone.setAttribute('material', `color: ${FORWARD_COLOR}; metalness: 0.2; roughness: 0.35;`);
         cone.setAttribute('position', '0 0.20 0');
-        cone.setAttribute('rotation', '0 0 0');
 
         const cyl = document.createElement('a-cylinder');
         cyl.setAttribute('radius', '0.07');
         cyl.setAttribute('height', '0.45');
-        cyl.setAttribute('color', FORWARD_COLOR);
         cyl.setAttribute('material', `color: ${FORWARD_COLOR}; metalness: 0.2; roughness: 0.35;`);
         cyl.setAttribute('position', '0 0 0');
-        cyl.setAttribute('rotation', '0 0 0');
 
         fwdTilt.appendChild(cyl);
         fwdTilt.appendChild(cone);
         fwdWrap.appendChild(fwdTilt);
 
-        // マーカーにぶら下げる
         marker.appendChild(arrowWrap);
         marker.appendChild(fwdWrap);
         scene.appendChild(marker);
@@ -386,8 +411,12 @@
             updateActionHUD(room, v);
             activeActionMarker = v;
           } else {
-            hudAction.style.display = 'none';
-            hudAction.textContent = '';
+            // ルート未登録なら常時表示
+            showUnregisteredIfNeeded();
+            if (hudAction.textContent !== 'この目的地はルート未登録です') {
+              hudAction.style.display = 'none';
+              hudAction.textContent = '';
+            }
             activeActionMarker = null;
           }
         });
@@ -423,20 +452,15 @@
         const arrowYaw  = document.getElementById(`arrowYaw-${v}`);
         const fwdWrap   = document.getElementById(`fwdWrap-${v}`);
 
-        // 全部消す
         if (arrowWrap) arrowWrap.setAttribute('visible', false);
         if (fwdWrap)   fwdWrap.setAttribute('visible', false);
 
-        // リセット
         if (arrowWrap) arrowWrap.setAttribute('position', `${POS_DEFAULT.x} ${POS_DEFAULT.y} ${POS_DEFAULT.z}`);
         if (arrowYaw)  arrowYaw.setAttribute('rotation', `0 0 0`);
 
         if (!dir) continue;
 
-        // 階段/到着はAR空間に出さない（HUDだけ）
-        if (dir === '階段' || dir === '階段上' || dir === '階段下' || dir === '到着') {
-          continue;
-        }
+        if (dir === '階段' || dir === '階段上' || dir === '階段下' || dir === '到着') continue;
 
         const key = normDir(dir);
 
@@ -449,7 +473,7 @@
           continue;
         }
 
-        // ★それ以外：GLB矢印
+        // ★それ以外：GLB矢印（変な反転はしない）
         if (arrowWrap) arrowWrap.setAttribute('visible', true);
 
         const p = POS_MAP[key] || POS_DEFAULT;
