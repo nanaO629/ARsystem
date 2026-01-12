@@ -79,7 +79,29 @@
     /********************
      * 定数
      ********************/
-    const MAX_MARKER = 58;
+    const MAX_MARKER = 58; // 3x3なら理論上 0〜63 まで作れる（後述）
+
+    /********************
+     * 目的地（追加分をここで管理）
+     * room パラメータは、以下のキーで受け取る
+     ********************/
+    const DEST_LABEL = {
+      // 既存
+      '3':'講義室 3','4':'講義室 4','5':'講義室 5','6':'講義室 6','7':'講義室 7','8':'講義室 8','9':'講義室 9','10':'講義室 10','11':'講義室 11',
+      'gakumu':'学務課',
+      'free':'フリーコモンズ',
+
+      // ★追加したい目的地（キーは英数にしてURLで安全に）
+      'lec1':'講義室 1',
+      'lec2':'講義室 2',
+      'lec12':'講義室 12',
+      'lec13':'講義室 13',
+      'englab4':'工学学生実験室 4',
+      'englab1':'工学学生実験室 1',
+      'englab2':'工学学生実験室 2',
+      'archdraft':'建築製図室',
+      'iotlab':'IoTソフトウェア工学研究室'
+    };
 
     /********************
      * 表示パラメータ
@@ -87,7 +109,7 @@
     const ARROW_TARGET_H   = 0.45; // GLB矢印の見かけ高さ(m)
     const ARROW_YAW_OFFSET = -90;  // GLB矢印の前向き補正
 
-    // ★直進（cone/cylinder）色：arrow.glb に近い青
+    // ★直進（cone/cylinder）色：arrow.glb に近い青（好みで微調整OK）
     const FORWARD_COLOR = '#1050f0';
 
     // 直進（プリミティブ矢印）を見やすい位置に
@@ -142,7 +164,7 @@
       }
     });
 
-    // マーカーの表裏を判定して必要ならYを180°反転
+    // マーカーの表裏を判定して必要ならYを180°反転（GLB側）
     AFRAME.registerComponent('flip-to-camera-side', {
       schema: { marker: { type: 'selector' } },
       tick() {
@@ -220,7 +242,12 @@
       return out;
     }
 
+    /********************
+     * ★ plan（矢印の指示）
+     * 追加目的地は、現時点では空（未登録）にしてある
+     ********************/
     const plan = buildPlan({
+      // ---- 既存 ----
       '3': [
         [1,'右'], [2,'到着'], [3,'到着'],
         ['4-7','左'], [10,'左斜め'], ['8-9','左'],
@@ -262,10 +289,25 @@
       'free': [
         ['1-4','右'], ['5-6','階段上'], [8,'左'], [6,'階段上'], ['20-26','右'], [27,'下'],
         ['11-17','左'], [10,'左斜め'], [28,'到着']
-      ]
+      ],
+
+      // ---- ★追加目的地（未登録：ここに矢印指示を足していく）----
+      'lec1': [],
+      'lec2': [],
+      'lec12': [],
+      'lec13': [],
+      'englab4': [],
+      'englab1': [],
+      'englab2': [],
+      'archdraft': [],
+      'iotlab': []
     });
 
-    const room = new URLSearchParams(location.search).get('room') || '3';
+    /********************
+     * room の決定
+     ********************/
+    const roomParam = new URLSearchParams(location.search).get('room') || '3';
+    const room = roomParam; // キーはそのまま使う（index.html側で room=lec1 みたいに渡す）
 
     /********************
      * HUD
@@ -275,8 +317,10 @@
 
     /********************
      * 距離データ
+     * 追加目的地は未登録（空）にしてある
      ********************/
     const distRaw = {
+      // ---- 既存 ----
       '3': { 1: 11, 2: 0, 3: 0, 4: 11, 5: 19, 6: 42, 7: 50, 8: 59, 9: 61, 10: 63, 11: 74, 12: 74, 13: 85, 14: 98, 15: 87, 16: 101, 17: 111, 18: 11, 19: 20, 20: 39, 21: 43, 22: 52, 23: 69, 24: 69, 25: 59, 26: 62, 27: 67, 28: 80 },
       '4': { 1: 20, 2: 11, 3: 13, 4: 4, 5: 10, 6: 33, 7: 40, 8: 49, 9: 51, 10: 55, 11: 65, 12: 65, 13: 76, 14: 88, 15: 78, 16: 92, 17: 102, 18: 0, 19: 10, 20: 30, 21: 34, 22: 42, 23: 60, 24: 60, 25: 49, 26: 53, 27: 58, 28: 70 },
       '5': { 1: 27, 2: 20, 3: 22, 4: 11, 5: 4, 6: 23, 7: 30, 8: 39, 9: 41, 10: 44, 11: 55, 12: 54, 13: 66, 14: 78, 15: 68, 16: 82, 17: 92, 18: 10, 19: 0, 20: 24, 21: 28, 22: 37, 23: 54, 24: 54, 25: 44, 26: 43, 27: 48, 28: 60 },
@@ -288,10 +332,27 @@
       '11': { 1: 79, 2: 71, 3: 69, 4: 59, 5: 50, 6: 74, 7: 81, 8: 91, 9: 92, 10: 95, 11: 106, 12: 106, 13: 117, 14: 129, 15: 119, 16: 133, 17: 143, 18: 60, 19: 54, 20: 30, 21: 31, 22: 20, 23: 4, 24: 0, 25: 50, 26: 67, 27: 72, 28: 84 },
       'gakumu': { 1: 86, 2: 80, 3: 80, 4: 70, 5: 61, 6: 37, 7: 45, 8: 54, 9: 55, 10: 59, 11: 69, 12: 69, 13: 80, 14: 93, 15: 83, 16: 96, 17: 106, 18: 70, 19: 60, 20: 54, 21: 54, 22: 66, 23: 84, 24: 84, 25: 35, 26: 17, 27: 12, 28: 0 },
       'free': { 1: 115, 2: 112, 3: 111, 4: 102, 5: 93, 6: 69, 7: 62, 8: 53, 9: 51, 10: 48, 11: 37, 12: 37, 13: 26, 14: 14, 15: 24, 16: 10, 17: 0, 18: 102, 19: 92, 20: 113, 21: 117, 22: 126, 23: 143, 24: 143, 25: 106, 26: 89, 27: 94, 28: 106 },
+
+      // ---- ★追加目的地（未登録：距離を足していく）----
+      'lec1': {},
+      'lec2': {},
+      'lec12': {},
+      'lec13': {},
+      'englab4': {},
+      'englab1': {},
+      'englab2': {},
+      'archdraft': {},
+      'iotlab': {}
     };
 
-    function pickMsg(room, value) {
-      const table = distRaw[room];
+    function pickMsg(roomKey, value) {
+      const table = distRaw[roomKey];
+
+      // 目的地キーはあるのに距離未登録なら、分かる表示にする
+      if (DEST_LABEL[roomKey] && (!table || Object.keys(table).length === 0)) {
+        return `「${DEST_LABEL[roomKey]}」は距離データ未登録`;
+      }
+
       if (!table) return null;
       const d = table[value];
       if (d == null) return null;
@@ -299,8 +360,8 @@
       return `あと${d}m`;
     }
 
-    function updateMsgHUD(room, value) {
-      const text = pickMsg(room, value);
+    function updateMsgHUD(roomKey, value) {
+      const text = pickMsg(roomKey, value);
       if (!text) {
         hudMsg.style.display = 'none';
         hudMsg.textContent = '';
@@ -310,8 +371,15 @@
       hudMsg.style.display = 'block';
     }
 
-    function pickAction(room, value) {
-      const dir = (plan[room] || {})[value];
+    function pickAction(roomKey, value) {
+      const table = plan[roomKey] || {};
+      const dir = table[value];
+
+      // plan未登録の目的地だと分かる表示（markerFound時に出す）
+      if (DEST_LABEL[roomKey] && (!plan[roomKey] || plan[roomKey].length === 0)) {
+        return `「${DEST_LABEL[roomKey]}」は経路データ未登録`;
+      }
+
       if (!dir) return null;
       if (dir === '階段上' || dir === '階段') return '階段を上がってください';
       if (dir === '階段下') return '階段を下りてください';
@@ -319,8 +387,8 @@
       return null;
     }
 
-    function updateActionHUD(room, value) {
-      const text = pickAction(room, value);
+    function updateActionHUD(roomKey, value) {
+      const text = pickAction(roomKey, value);
       if (!text) return;
 
       hudMsg.style.display = 'none';
@@ -363,23 +431,22 @@
         arrowYaw.appendChild(arrowFace);
         arrowWrap.appendChild(arrowYaw);
 
-        // ===== 直進用：先輩方式のプリミティブ矢印 =====
+        // ===== 直進用：プリミティブ矢印 =====
         const fwdWrap = document.createElement('a-entity');
         fwdWrap.setAttribute('id', `fwdWrap-${v}`);
         fwdWrap.setAttribute('visible', false);
         fwdWrap.setAttribute('position', `${FORWARD_POS.x} ${FORWARD_POS.y} ${FORWARD_POS.z}`);
         fwdWrap.setAttribute('face-camera-yaw', 'offset: 0'); // 常に正面
 
-        // “立体感”を出すために少し傾ける（安定）
+        // 立体感を出すために少し傾ける（ここは“直進が完璧だった”値を維持）
         const fwdTilt = document.createElement('a-entity');
-        fwdTilt.setAttribute('rotation', `-35 0 0`); // 好みで調整
+        fwdTilt.setAttribute('rotation', `-35 0 0`);
 
         const cone = document.createElement('a-cone');
         cone.setAttribute('radius-bottom', '0.18');
         cone.setAttribute('radius-top', '0.0');
         cone.setAttribute('height', '0.35');
         cone.setAttribute('color', FORWARD_COLOR);
-        // 質感寄せ（任意）
         cone.setAttribute('material', `color: ${FORWARD_COLOR}; metalness: 0.2; roughness: 0.35;`);
         cone.setAttribute('position', '0 0.20 0');
         cone.setAttribute('rotation', '0 0 0');
@@ -388,7 +455,6 @@
         cyl.setAttribute('radius', '0.07');
         cyl.setAttribute('height', '0.45');
         cyl.setAttribute('color', FORWARD_COLOR);
-        // 質感寄せ（任意）
         cyl.setAttribute('material', `color: ${FORWARD_COLOR}; metalness: 0.2; roughness: 0.35;`);
         cyl.setAttribute('position', '0 0 0');
         cyl.setAttribute('rotation', '0 0 0');
@@ -447,7 +513,7 @@
      * 表示適用
      ********************/
     function apply(foundValue) {
-      const table = plan[room] || {};
+      const table = (plan[room] || {});
       const loopFrom = (foundValue ? foundValue : 1);
       const loopTo   = (foundValue ? foundValue : MAX_MARKER);
 
