@@ -79,43 +79,35 @@
     /********************
      * 定数
      ********************/
-    // 3x3 barcode は基本 0〜63 まで使える（MAXを上げたいなら63まで）
-    const MAX_MARKER = 63;
+    const MAX_MARKER = 58;
 
     /********************
      * 表示パラメータ
      ********************/
     const ARROW_TARGET_H   = 0.45; // GLB矢印の見かけ高さ(m)
-    const ARROW_YAW_OFFSET = -90;  // GLBの前向き補正（モデルに合わせて調整）
+    const ARROW_YAW_OFFSET = -90;  // GLB矢印の前向き補正
 
-    // cone/cylinder（直進用）の色：GLBの青に近い感じ
-    const FORWARD_COLOR = "#1E62FF";
+    // ★直進（cone/cylinder）色：arrow.glb に近い青
+    const FORWARD_COLOR = '#1050f0';
 
-    // 直進矢印（cone/cylinder）のサイズ
-    const F_CYL_H = 0.90;
-    const F_CYL_R = 0.10;
-    const F_CONE_H = 0.40;
-    const F_CONE_R = 0.26;
+    // 直進（プリミティブ矢印）を見やすい位置に
+    const FORWARD_POS = { x: 0.00, y: 0.25, z: 0.90 };
 
-    // 直進矢印の表示位置（「下」に見えないように、マーカー中央寄りに）
-    const FORWARD_POS = { x: 0.00, y: 0.15, z: 0.80 };
-
-    // 壁マーカー向け：矢印を「壁から浮かせる」(m)
+    // 壁マーカー向け：GLB矢印を「壁から浮かせる」
     const POS_MAP = {
-      forward:    { x:  0.00, y: 0.00, z: 0.90 }, // 直進（※実際は専用FORWARD_POSを使う）
-      forwardRev: { x:  0.00, y: 0.00, z: 0.90 }, // 直進逆（※実際は専用FORWARD_POSを使う）
-      back:       { x:  0.00, y: 0.00, z: 0.65 },
-      right:      { x:  0.35, y: 0.00, z: 0.75 },
-      left:       { x: -0.35, y: 0.00, z: 0.75 },
-      right45:    { x:  0.25, y: 0.00, z: 0.95 },
-      left45:     { x: -0.25, y: 0.00, z: 0.95 }
+      forward: { x:  0.00, y: 0.00, z: 0.90 },
+      back:    { x:  0.00, y: 0.00, z: 0.65 },
+      right:   { x:  0.35, y: 0.00, z: 0.75 },
+      left:    { x: -0.35, y: 0.00, z: 0.75 },
+      right45: { x:  0.25, y: 0.00, z: 0.95 },
+      left45:  { x: -0.25, y: 0.00, z: 0.95 }
     };
     const POS_DEFAULT = { x: 0.00, y: 0.00, z: 0.75 };
 
     /********************
      * 自作コンポーネント
      ********************/
-    // GLBの全高を指定値に合わせる（モデルのバウンディングから自動スケール）
+    // GLBの全高を指定値に合わせる
     AFRAME.registerComponent('fit-model-height', {
       schema: { target: { type: 'number', default: 0.6 } },
       init() {
@@ -132,12 +124,57 @@
       }
     });
 
+    // Yawだけカメラへ正対
+    AFRAME.registerComponent('face-camera-yaw', {
+      schema: { offset: { type: 'number', default: 0 } },
+      tick() {
+        const cam = this.el.sceneEl && this.el.sceneEl.camera;
+        if (!cam) return;
+
+        const pos = new THREE.Vector3();
+        this.el.object3D.getWorldPosition(pos);
+
+        const dx = cam.position.x - pos.x;
+        const dz = cam.position.z - pos.z;
+
+        const yaw = Math.atan2(dx, dz) * 180 / Math.PI + this.data.offset;
+        this.el.setAttribute('rotation', `0 ${yaw} 0`);
+      }
+    });
+
+    // マーカーの表裏を判定して必要ならYを180°反転
+    AFRAME.registerComponent('flip-to-camera-side', {
+      schema: { marker: { type: 'selector' } },
+      tick() {
+        const markerEl = this.data.marker;
+        const scene = this.el.sceneEl;
+        const cam = scene && scene.camera;
+        if (!markerEl || !cam) return;
+        if (!markerEl.object3D.visible) return;
+
+        const markerPos = new THREE.Vector3();
+        const camPos = new THREE.Vector3();
+        markerEl.object3D.getWorldPosition(markerPos);
+        cam.getWorldPosition(camPos);
+
+        const toCam = camPos.sub(markerPos).normalize();
+
+        const q = new THREE.Quaternion();
+        markerEl.object3D.getWorldQuaternion(q);
+
+        const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(q).normalize();
+        const dot = normal.dot(toCam); // >0: 表 / <0: 裏
+        const flipDeg = (dot < 0) ? 180 : 0;
+
+        this.el.setAttribute('rotation', `0 ${flipDeg} 0`);
+      }
+    });
+
     /********************
-     * 方向の正規化
+     * 方向の正規化 + 矢印角度（GLB用）
      ********************/
     const CANON = {
-      '直進':'forward',
-      '直進逆':'forwardRev',   // ★追加：マーカー側向きの直進
+      '直進':'forward', 'up':'forward',
       'うしろ':'back', '下':'back', 'down':'back', 'back':'back',
       '右':'right', 'right':'right',
       '左':'left',  'left':'left',
@@ -146,10 +183,8 @@
     };
     function normDir(d){ return CANON[d] || d; }
 
-    /********************
-     * GLB用 yaw
-     ********************/
     const yawMap = {
+      forward: 0,
       back:    180,
       right:   90,
       left:   -90,
@@ -185,10 +220,6 @@
       return out;
     }
 
-    /********************
-     * ルート（例：既存）
-     * ※新しい目的地は、あとでここに追記していけばOK
-     ********************/
     const plan = buildPlan({
       '3': [
         [1,'右'], [2,'到着'], [3,'到着'],
@@ -228,38 +259,22 @@
         [1,'右'], ['5-6','階段上'], ['8-9','左'], [6,'階段上'], ['20-22','右'],[23,'直進'] ,['25-27','左'],
         ['11-17','左'], [10,'左斜め'], [24,'到着'],[7,'直進'],[18,'左'],[19,'左'],[4,'右'],['2-3','直進'],
       ],
-      'gakumu': [
-        // 例：ここは必要に応じて埋めて
-      ],
       'free': [
-        // 例：ここは必要に応じて埋めて
-      ],
-
-      // ★追加したい目的地（いったん空でOK：ページは開ける）
-      'exp4': [],
-      'exp1': [],
-      'exp2': [],
-      'seizu': [],
-      'r1': [],
-      'r2': [],
-      'r12': [],
-      'r13': [],
-      'iotlab': []
+        ['1-4','右'], ['5-6','階段上'], [8,'左'], [6,'階段上'], ['20-26','右'], [27,'下'],
+        ['11-17','左'], [10,'左斜め'], [28,'到着']
+      ]
     });
 
-    /********************
-     * room の決定
-     ********************/
     const room = new URLSearchParams(location.search).get('room') || '3';
 
     /********************
-     * HUD 要素
+     * HUD
      ********************/
     const hudMsg = document.getElementById('hudMsg');
     const hudAction = document.getElementById('hudAction');
 
     /********************
-     * 距離データ（既存）
+     * 距離データ
      ********************/
     const distRaw = {
       '3': { 1: 11, 2: 0, 3: 0, 4: 11, 5: 19, 6: 42, 7: 50, 8: 59, 9: 61, 10: 63, 11: 74, 12: 74, 13: 85, 14: 98, 15: 87, 16: 101, 17: 111, 18: 11, 19: 20, 20: 39, 21: 43, 22: 52, 23: 69, 24: 69, 25: 59, 26: 62, 27: 67, 28: 80 },
@@ -273,24 +288,13 @@
       '11': { 1: 79, 2: 71, 3: 69, 4: 59, 5: 50, 6: 74, 7: 81, 8: 91, 9: 92, 10: 95, 11: 106, 12: 106, 13: 117, 14: 129, 15: 119, 16: 133, 17: 143, 18: 60, 19: 54, 20: 30, 21: 31, 22: 20, 23: 4, 24: 0, 25: 50, 26: 67, 27: 72, 28: 84 },
       'gakumu': { 1: 86, 2: 80, 3: 80, 4: 70, 5: 61, 6: 37, 7: 45, 8: 54, 9: 55, 10: 59, 11: 69, 12: 69, 13: 80, 14: 93, 15: 83, 16: 96, 17: 106, 18: 70, 19: 60, 20: 54, 21: 54, 22: 66, 23: 84, 24: 84, 25: 35, 26: 17, 27: 12, 28: 0 },
       'free': { 1: 115, 2: 112, 3: 111, 4: 102, 5: 93, 6: 69, 7: 62, 8: 53, 9: 51, 10: 48, 11: 37, 12: 37, 13: 26, 14: 14, 15: 24, 16: 10, 17: 0, 18: 102, 19: 92, 20: 113, 21: 117, 22: 126, 23: 143, 24: 143, 25: 106, 26: 89, 27: 94, 28: 106 },
-
-      // ★追加目的地：距離未登録でも落ちないように（必要なら後で埋めて）
-      'exp4': {},
-      'exp1': {},
-      'exp2': {},
-      'seizu': {},
-      'r1': {},
-      'r2': {},
-      'r12': {},
-      'r13': {},
-      'iotlab': {}
     };
 
     function pickMsg(room, value) {
       const table = distRaw[room];
-      if (!table) return "距離データ未登録";
+      if (!table) return null;
       const d = table[value];
-      if (d == null) return "距離データ未登録";
+      if (d == null) return null;
       if (d === 0) return "到着しました";
       return `あと${d}m`;
     }
@@ -326,14 +330,6 @@
       hudAction.style.display = 'block';
     }
 
-    // 黒い棒対策：指定ID以外を強制削除
-    function purgeMarkerKeep(markerEl, keepId) {
-      const kids = Array.from(markerEl.children);
-      for (const child of kids) {
-        if (child.id !== keepId) markerEl.removeChild(child);
-      }
-    }
-
     let activeActionMarker = null;
     let actionHideTimer = null;
 
@@ -342,70 +338,78 @@
      ********************/
     const scene = document.querySelector('a-scene');
     scene.addEventListener('loaded', () => {
-      for (let v = 0; v <= MAX_MARKER; v++) {
+      for (let v = 1; v <= MAX_MARKER; v++) {
         const marker = document.createElement('a-marker');
         marker.setAttribute('type', 'barcode');
         marker.setAttribute('value', String(v));
         marker.setAttribute('id', `m${v}`);
 
-        // --- wrap ---
+        // ===== GLB矢印（直進以外に使う） =====
         const arrowWrap = document.createElement('a-entity');
         arrowWrap.setAttribute('id', `arrowWrap-${v}`);
 
-        // =========================
-        // 1) GLB矢印（右/左/斜め/戻るなど）
-        // =========================
-        const glbGroup = document.createElement('a-entity');
-        glbGroup.setAttribute('id', `glbGroup-${v}`);
-
         const arrowYaw = document.createElement('a-entity');
         arrowYaw.setAttribute('id', `arrowYaw-${v}`);
+
+        const arrowFace = document.createElement('a-entity');
+        arrowFace.setAttribute('id', `arrowFace-${v}`);
+        arrowFace.setAttribute('flip-to-camera-side', `marker: #m${v}`);
 
         const arrow = document.createElement('a-entity');
         arrow.setAttribute('gltf-model', '#arrowModel');
         arrow.setAttribute('fit-model-height', `target: ${ARROW_TARGET_H}`);
 
-        arrowYaw.appendChild(arrow);
-        glbGroup.appendChild(arrowYaw);
+        arrowFace.appendChild(arrow);
+        arrowYaw.appendChild(arrowFace);
+        arrowWrap.appendChild(arrowYaw);
 
-        // =========================
-        // 2) 直進用 cone/cylinder（自分側/マーカー側）
-        // =========================
-        const forwardGroup = document.createElement('a-entity');
-        forwardGroup.setAttribute('id', `forwardGroup-${v}`);
+        // ===== 直進用：先輩方式のプリミティブ矢印 =====
+        const fwdWrap = document.createElement('a-entity');
+        fwdWrap.setAttribute('id', `fwdWrap-${v}`);
+        fwdWrap.setAttribute('visible', false);
+        fwdWrap.setAttribute('position', `${FORWARD_POS.x} ${FORWARD_POS.y} ${FORWARD_POS.z}`);
+        fwdWrap.setAttribute('face-camera-yaw', 'offset: 0'); // 常に正面
 
-        // 共通マテリアル
-        const mat = `color:${FORWARD_COLOR}; metalness:0.15; roughness:0.35`;
+        // “立体感”を出すために少し傾ける（安定）
+        const fwdTilt = document.createElement('a-entity');
+        fwdTilt.setAttribute('rotation', `-35 0 0`); // 好みで調整
 
-        const fCyl = document.createElement('a-cylinder');
-        fCyl.setAttribute('id', `fCyl-${v}`);
-        fCyl.setAttribute('radius', String(F_CYL_R));
-        fCyl.setAttribute('height', String(F_CYL_H));
-        fCyl.setAttribute('material', mat);
+        const cone = document.createElement('a-cone');
+        cone.setAttribute('radius-bottom', '0.18');
+        cone.setAttribute('radius-top', '0.0');
+        cone.setAttribute('height', '0.35');
+        cone.setAttribute('color', FORWARD_COLOR);
+        // 質感寄せ（任意）
+        cone.setAttribute('material', `color: ${FORWARD_COLOR}; metalness: 0.2; roughness: 0.35;`);
+        cone.setAttribute('position', '0 0.20 0');
+        cone.setAttribute('rotation', '0 0 0');
 
-        const fCone = document.createElement('a-cone');
-        fCone.setAttribute('id', `fCone-${v}`);
-        fCone.setAttribute('radius-bottom', String(F_CONE_R));
-        fCone.setAttribute('radius-top', "0.001");
-        fCone.setAttribute('height', String(F_CONE_H));
-        fCone.setAttribute('material', mat);
+        const cyl = document.createElement('a-cylinder');
+        cyl.setAttribute('radius', '0.07');
+        cyl.setAttribute('height', '0.45');
+        cyl.setAttribute('color', FORWARD_COLOR);
+        // 質感寄せ（任意）
+        cyl.setAttribute('material', `color: ${FORWARD_COLOR}; metalness: 0.2; roughness: 0.35;`);
+        cyl.setAttribute('position', '0 0 0');
+        cyl.setAttribute('rotation', '0 0 0');
 
-        // ★「前向き（自分側）」＝ マーカー面から手前に突き出す感じ
-        //   cone/cylinderの軸を Z 方向にするために X回転
-        //   - 自分側（カメラ側）向き：rotation="90 0 0"（先端が -Z に来る）
-        //   - マーカー側向き：rotation="-90 0 0"（先端が +Z に来る）
-        forwardGroup.appendChild(fCyl);
-        forwardGroup.appendChild(fCone);
+        fwdTilt.appendChild(cyl);
+        fwdTilt.appendChild(cone);
+        fwdWrap.appendChild(fwdTilt);
 
-        // wrapに両方積む
-        arrowWrap.appendChild(glbGroup);
-        arrowWrap.appendChild(forwardGroup);
-
+        // マーカーにぶら下げる
         marker.appendChild(arrowWrap);
+        marker.appendChild(fwdWrap);
         scene.appendChild(marker);
 
         marker.addEventListener('markerFound', () => {
-          purgeMarkerKeep(marker, `arrowWrap-${v}`);
+          // 黒い棒掃除（arrowWrap と fwdWrap だけ残す）
+          const keepA = `arrowWrap-${v}`;
+          const keepB = `fwdWrap-${v}`;
+          const kids = Array.from(marker.children);
+          for (const child of kids) {
+            if (child.id !== keepA && child.id !== keepB) marker.removeChild(child);
+          }
 
           if (actionHideTimer) { clearTimeout(actionHideTimer); actionHideTimer = null; }
 
@@ -444,31 +448,28 @@
      ********************/
     function apply(foundValue) {
       const table = plan[room] || {};
-      const loopFrom = (foundValue != null ? foundValue : 0);
-      const loopTo   = (foundValue != null ? foundValue : MAX_MARKER);
+      const loopFrom = (foundValue ? foundValue : 1);
+      const loopTo   = (foundValue ? foundValue : MAX_MARKER);
 
       for (let v = loopFrom; v <= loopTo; v++) {
         const dir = table[v];
 
-        const arrowWrap    = document.getElementById(`arrowWrap-${v}`);
-        const glbGroup     = document.getElementById(`glbGroup-${v}`);
-        const arrowYaw     = document.getElementById(`arrowYaw-${v}`);
-        const forwardGroup = document.getElementById(`forwardGroup-${v}`);
-        const fCyl         = document.getElementById(`fCyl-${v}`);
-        const fCone        = document.getElementById(`fCone-${v}`);
+        const arrowWrap = document.getElementById(`arrowWrap-${v}`);
+        const arrowYaw  = document.getElementById(`arrowYaw-${v}`);
+        const arrowFace = document.getElementById(`arrowFace-${v}`);
+        const fwdWrap   = document.getElementById(`fwdWrap-${v}`);
 
-        if (!arrowWrap || !glbGroup || !arrowYaw || !forwardGroup || !fCyl || !fCone) continue;
+        // 全部消す
+        if (arrowWrap) arrowWrap.setAttribute('visible', false);
+        if (fwdWrap)   fwdWrap.setAttribute('visible', false);
 
-        // まず全部消す
-        arrowWrap.setAttribute('visible', false);
-        glbGroup.setAttribute('visible', false);
-        forwardGroup.setAttribute('visible', false);
-
-        // 位置リセット
-        arrowWrap.setAttribute('position', `${POS_DEFAULT.x} ${POS_DEFAULT.y} ${POS_DEFAULT.z}`);
-
-        // 回転リセット（GLB）
-        arrowYaw.setAttribute('rotation', `0 0 0`);
+        // リセット
+        if (arrowWrap) arrowWrap.setAttribute('position', `${POS_DEFAULT.x} ${POS_DEFAULT.y} ${POS_DEFAULT.z}`);
+        if (arrowYaw) {
+          arrowYaw.removeAttribute('face-camera-yaw');
+          arrowYaw.setAttribute('rotation', `0 0 0`);
+        }
+        if (arrowFace) arrowFace.setAttribute('rotation', `0 0 0`);
 
         if (!dir) continue;
 
@@ -479,61 +480,25 @@
 
         const key = normDir(dir);
 
-        // 表示
-        arrowWrap.setAttribute('visible', true);
-
-        // 位置
-        if (key === 'forward' || key === 'forwardRev') {
-          arrowWrap.setAttribute('position', `${FORWARD_POS.x} ${FORWARD_POS.y} ${FORWARD_POS.z}`);
-        } else {
-          const p = POS_MAP[key] || POS_DEFAULT;
-          arrowWrap.setAttribute('position', `${p.x} ${p.y} ${p.z}`);
-        }
-
-        // =========================
-        // A) 直進（cone/cylinder）
-        // =========================
-        if (key === 'forward' || key === 'forwardRev') {
-          forwardGroup.setAttribute('visible', true);
-          glbGroup.setAttribute('visible', false);
-
-          // 直進（自分側向き）
-          if (key === 'forward') {
-            // 先端を「自分側」に：-Zへ向く設定
-            fCyl.setAttribute('rotation', `90 0 0`);
-            fCone.setAttribute('rotation', `90 0 0`);
-            // 軸方向に並べる（-Z方向へ）
-            fCyl.setAttribute('position', `0 0 -0.35`);
-            fCone.setAttribute('position', `0 0 -0.85`);
+        // ★直進だけプリミティブ矢印
+        if (key === 'forward') {
+          if (fwdWrap) {
+            fwdWrap.setAttribute('visible', true);
+            fwdWrap.setAttribute('position', `${FORWARD_POS.x} ${FORWARD_POS.y} ${FORWARD_POS.z}`);
           }
-
-          // 直進逆（マーカー側向き）
-          if (key === 'forwardRev') {
-            // 先端を「マーカー側」に：+Zへ向く設定
-            fCyl.setAttribute('rotation', `-90 0 0`);
-            fCone.setAttribute('rotation', `-90 0 0`);
-            // 軸方向に並べる（+Z方向へ）
-            fCyl.setAttribute('position', `0 0 0.35`);
-            fCone.setAttribute('position', `0 0 0.85`);
-          }
-
           continue;
         }
 
-        // =========================
-        // B) それ以外（GLB）
-        // =========================
-        forwardGroup.setAttribute('visible', false);
-        glbGroup.setAttribute('visible', true);
+        // ★それ以外：GLB矢印
+        if (arrowWrap) arrowWrap.setAttribute('visible', true);
+
+        const p = POS_MAP[key] || POS_DEFAULT;
+        if (arrowWrap) arrowWrap.setAttribute('position', `${p.x} ${p.y} ${p.z}`);
 
         const baseYaw = yawMap[key];
         if (typeof baseYaw === 'number') {
-          // ★ここが重要：yawをちゃんと反映する
           const yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
-          arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
-        } else {
-          // 未定義方向は非表示にして安全側
-          arrowWrap.setAttribute('visible', false);
+          if (arrowYaw) arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
         }
       }
     }
