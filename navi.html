@@ -27,7 +27,7 @@
       word-break: break-word;
     }
 
-    /* ▼ 中央下：階段/到着HUD（大きめ・画面固定） */
+    /* ▼ 中央下：階段/到着/未設定HUD（大きめ・画面固定） */
     #hudAction{
       position: fixed;
       left: 50%;
@@ -41,9 +41,9 @@
       border-radius: 18px;
 
       padding: 14px 18px;
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 900;
-      line-height: 1.2;
+      line-height: 1.25;
       text-align: center;
       min-width: 240px;
 
@@ -82,18 +82,21 @@
     const MAX_MARKER = 58;
 
     /********************
-     * 表示パラメータ
+     * 見た目パラメータ
      ********************/
     const ARROW_TARGET_H   = 0.45; // GLB矢印の見かけ高さ(m)
-    const ARROW_YAW_OFFSET = -90;  // GLB矢印の前向き補正
+    const ARROW_YAW_OFFSET = -90;  // GLBの前向き補正（モデルに合わせて調整）
 
-    // ★直進（cone/cylinder）色：arrow.glb に近い青
-    const FORWARD_COLOR = '#1050f0';
+    // ★直進(forward)だけ：cone/cylinder 矢印（GLB色に寄せた）
+    const FORWARD_COLOR = '#1153EC'; // arrow.glbの平均色っぽい青
+    const FORWARD_SCALE = 1.0;       // 直進矢印の全体スケール
+    const FORWARD_POS   = { x: 0.00, y: 0.20, z: 0.90 }; // 壁マーカーから少し浮かせる
 
-    // 直進（プリミティブ矢印）を見やすい位置に
-    const FORWARD_POS = { x: 0.00, y: 0.25, z: 0.90 };
+    // 直進の立体感（ここをいじる）
+    const FORWARD_PITCH = -35; // X回転：マイナスほど「上にせり上がる」感じ
+    const FORWARD_ROLL  =  0;  // Z回転：斜めにしたい時に使う（例:-15）
 
-    // 壁マーカー向け：GLB矢印を「壁から浮かせる」
+    // 壁マーカー向け：方向ごとに「壁から浮かせる位置」
     const POS_MAP = {
       forward: { x:  0.00, y: 0.00, z: 0.90 },
       back:    { x:  0.00, y: 0.00, z: 0.65 },
@@ -107,7 +110,7 @@
     /********************
      * 自作コンポーネント
      ********************/
-    // GLBの全高を指定値に合わせる
+    // GLBの全高を指定値に合わせる（モデルのバウンディングから自動スケール）
     AFRAME.registerComponent('fit-model-height', {
       schema: { target: { type: 'number', default: 0.6 } },
       init() {
@@ -124,7 +127,7 @@
       }
     });
 
-    // Yawだけカメラへ正対
+    // ★Y軸だけカメラへ正対（直進で使う：左右の向きだけカメラに合わせる）
     AFRAME.registerComponent('face-camera-yaw', {
       schema: { offset: { type: 'number', default: 0 } },
       tick() {
@@ -142,36 +145,8 @@
       }
     });
 
-    // マーカーの表裏を判定して必要ならYを180°反転
-    AFRAME.registerComponent('flip-to-camera-side', {
-      schema: { marker: { type: 'selector' } },
-      tick() {
-        const markerEl = this.data.marker;
-        const scene = this.el.sceneEl;
-        const cam = scene && scene.camera;
-        if (!markerEl || !cam) return;
-        if (!markerEl.object3D.visible) return;
-
-        const markerPos = new THREE.Vector3();
-        const camPos = new THREE.Vector3();
-        markerEl.object3D.getWorldPosition(markerPos);
-        cam.getWorldPosition(camPos);
-
-        const toCam = camPos.sub(markerPos).normalize();
-
-        const q = new THREE.Quaternion();
-        markerEl.object3D.getWorldQuaternion(q);
-
-        const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(q).normalize();
-        const dot = normal.dot(toCam); // >0: 表 / <0: 裏
-        const flipDeg = (dot < 0) ? 180 : 0;
-
-        this.el.setAttribute('rotation', `0 ${flipDeg} 0`);
-      }
-    });
-
     /********************
-     * 方向の正規化 + 矢印角度（GLB用）
+     * 方向の正規化 + 角度
      ********************/
     const CANON = {
       '直進':'forward', 'up':'forward',
@@ -220,7 +195,12 @@
       return out;
     }
 
+    /********************
+     * ★ルート定義（plan）
+     * 追加した目的地は「未設定」にしてある（あとで埋める）
+     ********************/
     const plan = buildPlan({
+      // 既存（あなたのやつ）
       '3': [
         [1,'右'], [2,'到着'], [3,'到着'],
         ['4-7','左'], [10,'左斜め'], ['8-9','左'],
@@ -262,19 +242,37 @@
       'free': [
         ['1-4','右'], ['5-6','階段上'], [8,'左'], [6,'階段上'], ['20-26','右'], [27,'下'],
         ['11-17','左'], [10,'左斜め'], [28,'到着']
-      ]
+      ],
+      'gakumu': [
+        // ここはあなたが別で入れてるならそれに合わせてOK（いま未記載だったので空にしてる）
+      ],
+
+      // ★追加分（未設定：あとで entries を入れる）
+      '1': [],
+      '2': [],
+      '12': [],
+      '13': [],
+      'exp1': [],
+      'exp2': [],
+      'exp4': [],
+      'arch': [],
+      'iotlab': [],
     });
 
+    /********************
+     * room の決定
+     ********************/
     const room = new URLSearchParams(location.search).get('room') || '3';
 
     /********************
-     * HUD
+     * HUD 要素
      ********************/
     const hudMsg = document.getElementById('hudMsg');
     const hudAction = document.getElementById('hudAction');
 
     /********************
-     * 距離データ
+     * 距離データ（distRaw）
+     * 追加した目的地は未設定（{}）
      ********************/
     const distRaw = {
       '3': { 1: 11, 2: 0, 3: 0, 4: 11, 5: 19, 6: 42, 7: 50, 8: 59, 9: 61, 10: 63, 11: 74, 12: 74, 13: 85, 14: 98, 15: 87, 16: 101, 17: 111, 18: 11, 19: 20, 20: 39, 21: 43, 22: 52, 23: 69, 24: 69, 25: 59, 26: 62, 27: 67, 28: 80 },
@@ -286,10 +284,25 @@
       '9': { 1: 79, 2: 71, 3: 69, 4: 59, 5: 50, 6: 74, 7: 81, 8: 91, 9: 92, 10: 95, 11: 106, 12: 106, 13: 117, 14: 129, 15: 119, 16: 133, 17: 143, 18: 60, 19: 54, 20: 30, 21: 31, 22: 19, 23: 0, 24: 4, 25: 50, 26: 68, 27: 72, 28: 84 },
       '10': { 1: 53, 2: 45, 3: 43, 4: 33, 5: 24, 6: 48, 7: 55, 8: 65, 9: 66, 10: 69, 11: 80, 12: 80, 13: 91, 14: 103, 15: 93, 16: 107, 17: 117, 18: 34, 19: 28, 20: 4, 21: 0, 22: 12, 23: 31, 24: 31, 25: 20, 26: 37, 27: 42, 28: 54 },
       '11': { 1: 79, 2: 71, 3: 69, 4: 59, 5: 50, 6: 74, 7: 81, 8: 91, 9: 92, 10: 95, 11: 106, 12: 106, 13: 117, 14: 129, 15: 119, 16: 133, 17: 143, 18: 60, 19: 54, 20: 30, 21: 31, 22: 20, 23: 4, 24: 0, 25: 50, 26: 67, 27: 72, 28: 84 },
-      'gakumu': { 1: 86, 2: 80, 3: 80, 4: 70, 5: 61, 6: 37, 7: 45, 8: 54, 9: 55, 10: 59, 11: 69, 12: 69, 13: 80, 14: 93, 15: 83, 16: 96, 17: 106, 18: 70, 19: 60, 20: 54, 21: 54, 22: 66, 23: 84, 24: 84, 25: 35, 26: 17, 27: 12, 28: 0 },
+      'gakumu': {},
+
       'free': { 1: 115, 2: 112, 3: 111, 4: 102, 5: 93, 6: 69, 7: 62, 8: 53, 9: 51, 10: 48, 11: 37, 12: 37, 13: 26, 14: 14, 15: 24, 16: 10, 17: 0, 18: 102, 19: 92, 20: 113, 21: 117, 22: 126, 23: 143, 24: 143, 25: 106, 26: 89, 27: 94, 28: 106 },
+
+      // ★追加分（未設定）
+      '1': {},
+      '2': {},
+      '12': {},
+      '13': {},
+      'exp1': {},
+      'exp2': {},
+      'exp4': {},
+      'arch': {},
+      'iotlab': {},
     };
 
+    /********************
+     * HUD更新
+     ********************/
     function pickMsg(room, value) {
       const table = distRaw[room];
       if (!table) return null;
@@ -319,24 +332,29 @@
       return null;
     }
 
-    function updateActionHUD(room, value) {
-      const text = pickAction(room, value);
-      if (!text) return;
-
+    function showActionHUD(text, ms=0) {
       hudMsg.style.display = 'none';
       hudMsg.textContent = '';
-
       hudAction.textContent = text;
       hudAction.style.display = 'block';
+      if (ms > 0) {
+        setTimeout(() => {
+          hudAction.style.display = 'none';
+          hudAction.textContent = '';
+        }, ms);
+      }
     }
 
-    let activeActionMarker = null;
-    let actionHideTimer = null;
+    function hideActionHUD() {
+      hudAction.style.display = 'none';
+      hudAction.textContent = '';
+    }
 
     /********************
      * マーカー生成
      ********************/
     const scene = document.querySelector('a-scene');
+
     scene.addEventListener('loaded', () => {
       for (let v = 1; v <= MAX_MARKER; v++) {
         const marker = document.createElement('a-marker');
@@ -344,102 +362,96 @@
         marker.setAttribute('value', String(v));
         marker.setAttribute('id', `m${v}`);
 
-        // ===== GLB矢印（直進以外に使う） =====
-        const arrowWrap = document.createElement('a-entity');
-        arrowWrap.setAttribute('id', `arrowWrap-${v}`);
+        // ========= GLB矢印（forward以外） =========
+        const glbWrap = document.createElement('a-entity');
+        glbWrap.setAttribute('id', `glbWrap-${v}`);
+        glbWrap.setAttribute('visible', false);
 
-        const arrowYaw = document.createElement('a-entity');
-        arrowYaw.setAttribute('id', `arrowYaw-${v}`);
+        const glbYaw = document.createElement('a-entity');
+        glbYaw.setAttribute('id', `glbYaw-${v}`);
 
-        const arrowFace = document.createElement('a-entity');
-        arrowFace.setAttribute('id', `arrowFace-${v}`);
-        arrowFace.setAttribute('flip-to-camera-side', `marker: #m${v}`);
+        const glb = document.createElement('a-entity');
+        glb.setAttribute('gltf-model', '#arrowModel');
+        glb.setAttribute('fit-model-height', `target: ${ARROW_TARGET_H}`);
 
-        const arrow = document.createElement('a-entity');
-        arrow.setAttribute('gltf-model', '#arrowModel');
-        arrow.setAttribute('fit-model-height', `target: ${ARROW_TARGET_H}`);
+        glbYaw.appendChild(glb);
+        glbWrap.appendChild(glbYaw);
+        marker.appendChild(glbWrap);
 
-        arrowFace.appendChild(arrow);
-        arrowYaw.appendChild(arrowFace);
-        arrowWrap.appendChild(arrowYaw);
-
-        // ===== 直進用：先輩方式のプリミティブ矢印 =====
+        // ========= 直進用 cone/cylinder =========
         const fwdWrap = document.createElement('a-entity');
         fwdWrap.setAttribute('id', `fwdWrap-${v}`);
         fwdWrap.setAttribute('visible', false);
         fwdWrap.setAttribute('position', `${FORWARD_POS.x} ${FORWARD_POS.y} ${FORWARD_POS.z}`);
-        fwdWrap.setAttribute('face-camera-yaw', 'offset: 0'); // 常に正面
+        fwdWrap.setAttribute('scale', `${FORWARD_SCALE} ${FORWARD_SCALE} ${FORWARD_SCALE}`);
 
-        // “立体感”を出すために少し傾ける（安定）
+        // yawはカメラへ正対（左右だけ）
+        const fwdYaw = document.createElement('a-entity');
+        fwdYaw.setAttribute('id', `fwdYaw-${v}`);
+        fwdYaw.setAttribute('face-camera-yaw', `offset: 0`);
+
+        // pitch/rollで立体感
         const fwdTilt = document.createElement('a-entity');
-        fwdTilt.setAttribute('rotation', `-35 0 0`); // 好みで調整
+        fwdTilt.setAttribute('id', `fwdTilt-${v}`);
+        fwdTilt.setAttribute('rotation', `${FORWARD_PITCH} 0 ${FORWARD_ROLL}`);
 
+        // 円柱（軸）
+        const cyl = document.createElement('a-cylinder');
+        cyl.setAttribute('radius', '0.06');
+        cyl.setAttribute('height', '0.9');
+        cyl.setAttribute('color', FORWARD_COLOR);
+        cyl.setAttribute('material', 'shader: standard; metalness: 0.1; roughness: 0.35;');
+        // Y軸→Z軸へ（+Z方向に伸ばす）
+        cyl.setAttribute('rotation', '90 0 0');
+        cyl.setAttribute('position', '0 0 0.15');
+
+        // 円錐（先端）
         const cone = document.createElement('a-cone');
         cone.setAttribute('radius-bottom', '0.18');
-        cone.setAttribute('radius-top', '0.0');
+        cone.setAttribute('radius-top', '0');
         cone.setAttribute('height', '0.35');
         cone.setAttribute('color', FORWARD_COLOR);
-        // 質感寄せ（任意）
-        cone.setAttribute('material', `color: ${FORWARD_COLOR}; metalness: 0.2; roughness: 0.35;`);
-        cone.setAttribute('position', '0 0.20 0');
-        cone.setAttribute('rotation', '0 0 0');
-
-        const cyl = document.createElement('a-cylinder');
-        cyl.setAttribute('radius', '0.07');
-        cyl.setAttribute('height', '0.45');
-        cyl.setAttribute('color', FORWARD_COLOR);
-        // 質感寄せ（任意）
-        cyl.setAttribute('material', `color: ${FORWARD_COLOR}; metalness: 0.2; roughness: 0.35;`);
-        cyl.setAttribute('position', '0 0 0');
-        cyl.setAttribute('rotation', '0 0 0');
+        cone.setAttribute('material', 'shader: standard; metalness: 0.1; roughness: 0.35;');
+        cone.setAttribute('rotation', '90 0 0'); // 先端を+Zへ
+        cone.setAttribute('position', '0 0 0.72');
 
         fwdTilt.appendChild(cyl);
         fwdTilt.appendChild(cone);
-        fwdWrap.appendChild(fwdTilt);
-
-        // マーカーにぶら下げる
-        marker.appendChild(arrowWrap);
+        fwdYaw.appendChild(fwdTilt);
+        fwdWrap.appendChild(fwdYaw);
         marker.appendChild(fwdWrap);
+
         scene.appendChild(marker);
 
+        // 検出時
         marker.addEventListener('markerFound', () => {
-          // 黒い棒掃除（arrowWrap と fwdWrap だけ残す）
-          const keepA = `arrowWrap-${v}`;
-          const keepB = `fwdWrap-${v}`;
-          const kids = Array.from(marker.children);
-          for (const child of kids) {
-            if (child.id !== keepA && child.id !== keepB) marker.removeChild(child);
-          }
-
-          if (actionHideTimer) { clearTimeout(actionHideTimer); actionHideTimer = null; }
-
           apply(v);
-          updateMsgHUD(room, v);
 
+          // 階段/到着は hudAction 優先
           const a = pickAction(room, v);
           if (a) {
-            updateActionHUD(room, v);
-            activeActionMarker = v;
+            showActionHUD(a);
           } else {
-            hudAction.style.display = 'none';
-            hudAction.textContent = '';
-            activeActionMarker = null;
+            hideActionHUD();
+            updateMsgHUD(room, v);
+          }
+
+          // 追加した目的地でルート未設定なら案内を出す
+          const hasPlan = !!(plan[room] && Object.keys(plan[room]).length);
+          const hasDist = !!(distRaw[room] && Object.keys(distRaw[room]).length);
+          if (!hasPlan && !hasDist) {
+            showActionHUD('この目的地は未設定です\n(plan / distRaw を追加してね)', 1500);
           }
         });
 
         marker.addEventListener('markerLost', () => {
-          if (activeActionMarker !== v) return;
-
-          if (actionHideTimer) clearTimeout(actionHideTimer);
-          actionHideTimer = setTimeout(() => {
-            hudAction.style.display = 'none';
-            hudAction.textContent = '';
-            activeActionMarker = null;
-            actionHideTimer = null;
-          }, 600);
+          // HUDは「チラつき」防止で即消さない（必要なら調整OK）
+          // hideActionHUD();
+          // hudMsg.style.display = 'none';
         });
       }
 
+      // 初期反映
       apply();
     });
 
@@ -454,22 +466,14 @@
       for (let v = loopFrom; v <= loopTo; v++) {
         const dir = table[v];
 
-        const arrowWrap = document.getElementById(`arrowWrap-${v}`);
-        const arrowYaw  = document.getElementById(`arrowYaw-${v}`);
-        const arrowFace = document.getElementById(`arrowFace-${v}`);
-        const fwdWrap   = document.getElementById(`fwdWrap-${v}`);
+        const glbWrap = document.getElementById(`glbWrap-${v}`);
+        const glbYaw  = document.getElementById(`glbYaw-${v}`);
+        const fwdWrap = document.getElementById(`fwdWrap-${v}`);
+        const fwdTilt = document.getElementById(`fwdTilt-${v}`);
 
-        // 全部消す
-        if (arrowWrap) arrowWrap.setAttribute('visible', false);
-        if (fwdWrap)   fwdWrap.setAttribute('visible', false);
-
-        // リセット
-        if (arrowWrap) arrowWrap.setAttribute('position', `${POS_DEFAULT.x} ${POS_DEFAULT.y} ${POS_DEFAULT.z}`);
-        if (arrowYaw) {
-          arrowYaw.removeAttribute('face-camera-yaw');
-          arrowYaw.setAttribute('rotation', `0 0 0`);
-        }
-        if (arrowFace) arrowFace.setAttribute('rotation', `0 0 0`);
+        // まず全部非表示
+        if (glbWrap) glbWrap.setAttribute('visible', false);
+        if (fwdWrap) fwdWrap.setAttribute('visible', false);
 
         if (!dir) continue;
 
@@ -480,25 +484,28 @@
 
         const key = normDir(dir);
 
-        // ★直進だけプリミティブ矢印
+        // ========= 直進：cone/cylinder =========
         if (key === 'forward') {
-          if (fwdWrap) {
-            fwdWrap.setAttribute('visible', true);
-            fwdWrap.setAttribute('position', `${FORWARD_POS.x} ${FORWARD_POS.y} ${FORWARD_POS.z}`);
-          }
+          fwdWrap.setAttribute('visible', true);
+          fwdWrap.setAttribute('position', `${FORWARD_POS.x} ${FORWARD_POS.y} ${FORWARD_POS.z}`);
+
+          // 立体感はここ（都度調整できる）
+          fwdTilt.setAttribute('rotation', `${FORWARD_PITCH} 0 ${FORWARD_ROLL}`);
           continue;
         }
 
-        // ★それ以外：GLB矢印
-        if (arrowWrap) arrowWrap.setAttribute('visible', true);
+        // ========= それ以外：GLB矢印 =========
+        glbWrap.setAttribute('visible', true);
 
+        // 位置
         const p = POS_MAP[key] || POS_DEFAULT;
-        if (arrowWrap) arrowWrap.setAttribute('position', `${p.x} ${p.y} ${p.z}`);
+        glbWrap.setAttribute('position', `${p.x} ${p.y} ${p.z}`);
 
+        // 回転（ここが重要：ちゃんとyawを入れる）
         const baseYaw = yawMap[key];
         if (typeof baseYaw === 'number') {
           const yaw = ((baseYaw + ARROW_YAW_OFFSET) % 360 + 360) % 360;
-          if (arrowYaw) arrowYaw.setAttribute('rotation', `0 ${yaw} 0`);
+          glbYaw.setAttribute('rotation', `0 ${yaw} 0`);
         }
       }
     }
