@@ -22,7 +22,8 @@
       background: var(--bg);
       color: var(--text);
       margin: 0;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "Noto Sans JP", sans-serif;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+        "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, "Noto Sans JP", sans-serif;
     }
 
     .wrap {
@@ -75,6 +76,8 @@
       transition: transform .06s ease, background .2s ease, box-shadow .2s ease;
       box-shadow: 0 6px 14px rgba(253, 27, 215, 0.18);
       -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      position: relative; /* 吹き出しの基準にも使える */
     }
     .btn:hover { background: var(--accent-2); }
     .btn:active { transform: translateY(1px) scale(0.99); }
@@ -87,12 +90,84 @@
       letter-spacing: .02em;
     }
 
-    .note {
-      margin-top: 18px;
-      font-size: 12px;
-      color: var(--muted);
+    /* ===== ボタン内に ? を入れる ===== */
+    .btn.hasInfo{
+      justify-content: space-between;
+      gap: 10px;
+      padding-right: 10px; /* ? 分だけちょい詰め */
+    }
+    .btnLabel{
+      flex: 1;
       text-align: center;
-      line-height: 1.6;
+      padding-left: 10px; /* 左右バランス */
+    }
+
+    /* ボタン内の ?（右端） */
+    .infoInBtn{
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.55);
+      background: rgba(255,255,255,0.18);
+      color: #fff;
+      font-weight: 900;
+      font-size: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      flex: 0 0 auto;
+    }
+    .infoInBtn:active { transform: translateY(1px) scale(0.99); }
+
+    /* ===== 吹き出し ===== */
+    .tipBubble{
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 10px);
+      transform: translateX(-50%);
+      width: max-content;
+      max-width: min(72vw, 360px);
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #111c;
+      color: #fff;
+      border: 1px solid #333;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.18);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      font-size: 13px;
+      line-height: 1.5;
+      text-align: left;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .15s ease, transform .15s ease;
+      z-index: 9999;
+      white-space: normal;
+      word-break: break-word;
+    }
+    .tipBubble::after{
+      content:"";
+      position:absolute;
+      top:100%;
+      left:50%;
+      transform:translateX(-50%);
+      border:8px solid transparent;
+      border-top-color:#111c;
+      filter: drop-shadow(0 2px 0 rgba(0,0,0,0.15));
+    }
+
+    .btn.tip-show .tipBubble{
+      opacity: 1;
+      transform: translateX(-50%) translateY(-2px);
+      pointer-events: auto;
+    }
+
+    /* PCは ? にホバーでも出せる（任意） */
+    .btn.hasInfo:hover .tipBubble{
+      /* 文字にホバーでも出るのが嫌なら消してOK */
+      /* opacity: 1; transform: translateX(-50%) translateY(-2px); */
     }
   </style>
 </head>
@@ -130,18 +205,66 @@
           <a class="btn" href="navi.html?room=exp1">工学学生実験室 1</a>
           <a class="btn" href="navi.html?room=exp2">工学学生実験室 2</a>
           <a class="btn" href="navi.html?room=arch">建築製図室</a>
-          <a class="btn" href="navi.html?room=iotlab">IoTソフトウェア工学研究室</a>
+
+          <!-- IoT：ボタンの中に ? -->
+          <a class="btn hasInfo" href="navi.html?room=iotlab" data-tip="IoT・ソフトウェア開発の研究を行っている研究室です。">
+            <span class="btnLabel">IoTソフトウェア工学研究室</span>
+            <button class="infoInBtn" type="button" aria-label="IoTソフトウェア工学研究室の説明">?</button>
+            <span class="tipBubble" role="tooltip"></span>
+          </a>
         </div>
       </div>
 
       <div class="sect">
         <div class="sect-title">その他</div>
         <div class="grid" aria-label="その他の目的地">
-          <a class="btn" href="navi.html?room=gakumu">学務課</a>
+
+          <!-- 学務課：ボタンの中に ? -->
+          <a class="btn hasInfo" href="navi.html?room=gakumu" data-tip="履修登録・成績・各種手続きの窓口です。">
+            <span class="btnLabel">学務課</span>
+            <button class="infoInBtn" type="button" aria-label="学務課の説明">?</button>
+            <span class="tipBubble" role="tooltip"></span>
+          </a>
+
+          <!-- フリーコモンズ：補足なし -->
+          <a class="btn" href="navi.html?room=free">フリーコモンズ</a>
         </div>
       </div>
 
     </main>
   </div>
+
+  <script>
+    const infoButtons = Array.from(document.querySelectorAll('.btn.hasInfo'));
+
+    function closeAll(except = null){
+      infoButtons.forEach(a => {
+        if (a !== except) a.classList.remove('tip-show');
+      });
+    }
+
+    // 吹き出しに文言を反映
+    infoButtons.forEach(a => {
+      const bubble = a.querySelector('.tipBubble');
+      if (bubble) bubble.textContent = a.getAttribute('data-tip') || '';
+
+      const q = a.querySelector('.infoInBtn');
+      q?.addEventListener('click', (e) => {
+        // ？だけ：遷移させない
+        e.preventDefault();
+        e.stopPropagation();
+
+        const isOpen = a.classList.contains('tip-show');
+        closeAll(a);
+        a.classList.toggle('tip-show', !isOpen);
+      }, { passive: false });
+    });
+
+    // 画面の外をタップしたら閉じる
+    document.addEventListener('click', (e) => {
+      const inside = e.target.closest('.btn.hasInfo');
+      if (!inside) closeAll(null);
+    });
+  </script>
 </body>
 </html>
